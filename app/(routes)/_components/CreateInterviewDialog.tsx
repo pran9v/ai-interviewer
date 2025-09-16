@@ -77,8 +77,8 @@ function CreateInterviewDialog() {
 
     return (
         <Dialog>
-            <DialogTrigger>
-                <Button>+ Create Interview</Button>
+            <DialogTrigger asChild>
+                <Button type="button">+ Create Interview</Button>
             </DialogTrigger>
             <DialogContent className='min-w-3xl'>
                 <DialogHeader>
@@ -95,10 +95,10 @@ function CreateInterviewDialog() {
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter className='flex gap-6'>
-                    <DialogClose>
-                        <Button variant={'ghost'}>Cancel</Button>
-                    </DialogClose>
-                    <Button onClick={onSubmit} disabled={loading} >
+                    <Button variant={'ghost'} onClick={() => document.querySelector('[data-slot="dialog-close"]')?.click()}>
+                        Cancel
+                    </Button>
+                    <Button onClick={onSubmit} disabled={loading}>
                         {loading && <Loader2Icon className='animate-spin' />} Submit</Button>
                 </DialogFooter>
             </DialogContent>
