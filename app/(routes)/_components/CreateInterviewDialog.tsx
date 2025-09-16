@@ -95,9 +95,11 @@ function CreateInterviewDialog() {
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter className='flex gap-6'>
-                    <Button variant={'ghost'} onClick={() => document.querySelector('[data-slot="dialog-close"]')?.click()}>
-                        Cancel
-                    </Button>
+                    <DialogClose asChild>
+                        <Button variant={'ghost'}>
+                            Cancel
+                        </Button>
+                    </DialogClose>
                     <Button onClick={onSubmit} disabled={loading}>
                         {loading && <Loader2Icon className='animate-spin' />} Submit</Button>
                 </DialogFooter>
