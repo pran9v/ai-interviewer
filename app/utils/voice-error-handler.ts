@@ -162,11 +162,10 @@ export class VoiceErrorHandler {
      * Show error message to user
      */
     private showErrorMessage(message: string): void {
-        // You can customize this to use your preferred notification system
         if (typeof window !== 'undefined') {
-            // Use toast notification if available
-            if (window.toast) {
-                window.toast.error(message);
+            const maybeToast = (window as any).toast;
+            if (maybeToast && typeof maybeToast.error === 'function') {
+                maybeToast.error(message);
             } else {
                 alert(message);
             }

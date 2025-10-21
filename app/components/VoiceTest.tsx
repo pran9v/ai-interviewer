@@ -13,12 +13,17 @@ interface TestResult {
 
 export default function VoiceTest() {
     const [testing, setTesting] = useState(false);
-    const [results, setResults] = useState<TestResult | null>(null);
+    const [results, setResults] = useState<TestResult>({
+        microphone: false,
+        speaker: false,
+        twilioDevice: false,
+        network: false,
+    });
     const [currentTest, setCurrentTest] = useState<string>('');
 
     const runTests = async () => {
         setTesting(true);
-        setResults(null);
+        setResults({ microphone: false, speaker: false, twilioDevice: false, network: false });
         
         try {
             const voiceTest = VoiceTestUtils.getInstance();
@@ -84,7 +89,7 @@ export default function VoiceTest() {
                     {currentTest === 'microphone' ? (
                         <Loader2 className="animate-spin text-blue-500" />
                     ) : (
-                        getStatusIcon(results?.microphone)
+                        getStatusIcon(results.microphone)
                     )}
                 </div>
                 
@@ -93,7 +98,7 @@ export default function VoiceTest() {
                     {currentTest === 'speaker' ? (
                         <Loader2 className="animate-spin text-blue-500" />
                     ) : (
-                        getStatusIcon(results?.speaker)
+                        getStatusIcon(results.speaker)
                     )}
                 </div>
                 
@@ -102,7 +107,7 @@ export default function VoiceTest() {
                     {currentTest === 'twilioDevice' ? (
                         <Loader2 className="animate-spin text-blue-500" />
                     ) : (
-                        getStatusIcon(results?.twilioDevice)
+                        getStatusIcon(results.twilioDevice)
                     )}
                 </div>
                 
@@ -111,7 +116,7 @@ export default function VoiceTest() {
                     {currentTest === 'network' ? (
                         <Loader2 className="animate-spin text-blue-500" />
                     ) : (
-                        getStatusIcon(results?.network)
+                        getStatusIcon(results.network)
                     )}
                 </div>
             </div>
@@ -131,7 +136,7 @@ export default function VoiceTest() {
                 )}
             </Button>
             
-            {results && !testing && (
+            {!testing && (
                 <div className="mt-4 p-4 bg-gray-50 rounded-md">
                     <h3 className="font-semibold mb-2">Test Results</h3>
                     <ul className="space-y-2">

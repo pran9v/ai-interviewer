@@ -1,5 +1,6 @@
 "use client"
 import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
 import axios from 'axios';
 import { useConvex, useMutation } from 'convex/react';
 import { useParams, useRouter } from 'next/navigation'
@@ -17,7 +18,7 @@ export type InterviewData = {
     jobDescription: string | null,
     interviewQuestions: InterviewQuestions[],
     userId: string | null,
-    _id: string,
+    _id: Id<'InterviewSessionTable'>,
     resumeUrl: string | null,
     status: string | null,
     feedback: FeedbackInfo | null,

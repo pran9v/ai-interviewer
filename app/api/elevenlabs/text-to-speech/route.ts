@@ -13,10 +13,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Text is required' }, { status: 400 });
     }
 
-    const audio = await elevenlabs.generate({
-      voice: voice_id,
-      text: text,
-      model_id: "eleven_monolingual_v1"
+    // Use ElevenLabs Text-to-Speech convert API
+    const audio = await elevenlabs.textToSpeech.convert(voice_id, {
+      text,
+      modelId: "eleven_monolingual_v1",
+      outputFormat: "mp3_44100_128"
     });
 
     return new NextResponse(audio, {
