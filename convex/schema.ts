@@ -12,9 +12,13 @@ export default defineSchema({
         interviewQuestions: v.any(),
         resumeUrl: v.union(v.string(), v.null()),
         userId: v.id('UserTable'),
-        status: v.string(),
+        status: v.string(), // 'draft', 'in_progress', 'completed'
         jobTitle: v.union(v.string(), v.null()),
         jobDescription: v.union(v.string(), v.null()),
-        feedback: v.optional(v.any())
+        feedback: v.optional(v.any()),
+        conversation: v.optional(v.any()), // Conversation history
+        currentQuestionIndex: v.optional(v.number()),
+        startedAt: v.optional(v.number()),
+        completedAt: v.optional(v.number())
     })
 })

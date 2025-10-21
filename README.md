@@ -35,6 +35,22 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
   ARCJET_KEY=ajkey_01k590m2ygfj9sm49z9v67za04
   ```
 
+#### ElevenLabs API Setup
+- Sign up at https://elevenlabs.io
+- Get your API key from the profile section
+- Add to `.env`:
+  ```
+  ELEVENLABS_API_KEY=your_elevenlabs_api_key
+  ```
+
+#### OpenAI API Setup (for Speech-to-Text)
+- Sign up at https://platform.openai.com
+- Get your API key from the API section
+- Add to `.env`:
+  ```
+  OPENAI_API_KEY=your_openai_api_key
+  ```
+
 ### Running the Development Server
 
 ```bash

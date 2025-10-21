@@ -4,11 +4,14 @@ import axios from 'axios';
 import { useConvex, useMutation } from 'convex/react';
 import { useParams, useRouter } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
-import { GenericAgoraSDK } from 'akool-streaming-avatar-sdk';
 import { Button } from '@/components/ui/button';
-import { Mic, MicOff, PhoneCall, PhoneOff, User } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Mic, MicOff, Play, Pause, Volume2, VolumeX, Keyboard } from 'lucide-react';
 import { toast } from 'sonner';
 import { FeedbackInfo } from '@/app/(routes)/dashboard/_components/FeedbackDialog';
+import { ConversationManager, ConversationMessage } from '@/app/utils/conversation-manager';
+import { AudioRecorder } from '@/app/utils/audio-recorder';
+
 export type InterviewData = {
     jobTitle: string | null,
     jobDescription: string | null,
@@ -17,7 +20,11 @@ export type InterviewData = {
     _id: string,
     resumeUrl: string | null,
     status: string | null,
-    feedback: FeedbackInfo | null
+    feedback: FeedbackInfo | null,
+    conversation?: ConversationMessage[],
+    currentQuestionIndex?: number,
+    startedAt?: number,
+    completedAt?: number
 }
 
 type InterviewQuestions = {
@@ -25,32 +32,28 @@ type InterviewQuestions = {
     question: string
 }
 
-type Messages = {
-
-    from: 'user' | 'bot',
-    text: string
-
-}
-
-const CONTAINER_ID = 'akool-avatar-container';
-const AVATAR_ID = 'dvp_Tristan_cloth2_1080P'
-const DUMMY_COVERSATION = "[{'from':'bot','text':'Tell me about yourself. '},{'from':'user','text':'I am React Developer working in IT from last 7 years'}, {'from':'bot','text':'That's great to hear! '},{'from':'bot','text':' Can you explain the role of state in React and how it differs from props? '}, {'from':'user','text':'I am working in the IT industry from last seven years.'},{'from':'bot','text':'Thank you for sharing that! '}, {'from':'bot','text':' Can you explain the role of state in React and how it differs from props? '}, {'from':'user','text':'It used to manage the state of the react application like setting the value or getting the value.'}, {'from':'bot','text':'That's a good explanation! '},{'from':'bot','text':' How do you manage form state in a React application? '},{ 'from':'user','text':'Prop is used to send value from one component to other.'},{'from':'bot','text':'Thank you for that clarification! '}, {'from':'bot','text':' How do you manage form state in a React application? '},{'from':'user','text':'There are different library as well but you can manage it using the useState.'}, {'from':'bot','text':'Great! '},{'from':'bot','text':' Thank you for your insights. '}]"
 function StartInterview() {
     const { interviewId } = useParams();
     const convex = useConvex();
     const [interviewData, setInterviewData] = useState<InterviewData>();
-    const videoContainerRef = useRef<any>(null);
-    const [micOn, setMicOn] = useState(false);
-    const [kbId, setKbId] = useState<string | null>();
-    const [agoraSdk, setAgoraSdk] = useState<GenericAgoraSDK | null>(null)
-    const [joined, setJoined] = useState(false);
+    const [isRecording, setIsRecording] = useState(false);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [isMuted, setIsMuted] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [messages, setMessages] = useState<Messages[]>([]);
-    const updateFeedback = useMutation(api.Interview.UpdateFeedback)
+    const [conversationManager, setConversationManager] = useState<ConversationManager | null>(null);
+    const [currentQuestion, setCurrentQuestion] = useState<string>('');
+    const [audioRecorder] = useState(() => new AudioRecorder());
+    const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
+    const [showTextInput, setShowTextInput] = useState(false);
+    const [textResponse, setTextResponse] = useState('');
+    
+    const updateFeedback = useMutation(api.Interview.UpdateFeedback);
+    const startInterview = useMutation(api.Interview.StartInterview);
+    const updateConversation = useMutation(api.Interview.UpdateConversation);
     const router = useRouter();
+
     useEffect(() => {
         GetInterviewQuestions();
-
     }, [interviewId])
 
     const GetInterviewQuestions = async () => {
@@ -61,255 +64,455 @@ function StartInterview() {
         console.log(result);
         //@ts-ignore
         setInterviewData(result);
-
     }
 
-
     useEffect(() => {
-        interviewData && GetKnowledgeBase();
+        if (interviewData?.interviewQuestions) {
+            const questions = interviewData.interviewQuestions.map(q => q.question);
+            const manager = new ConversationManager(questions);
+            setConversationManager(manager);
+        }
     }, [interviewData])
 
-    const GetKnowledgeBase = async () => {
-        const result = await axios.post('/api/akool-knowledge-base', {
-            questions: interviewData?.interviewQuestions
-        });
-        console.log(result);
-        setKbId(result?.data?.data?._id)
-    }
-    console.log(kbId)
+    const speakText = async (text: string): Promise<void> => {
+        try {
+            setIsPlaying(true);
+            
+            const response = await fetch('/api/elevenlabs/text-to-speech', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text })
+            });
 
-    useEffect(() => {
-        const sdk = new GenericAgoraSDK({ mode: "rtc", codec: "vp8" });
-        // Register event handlers
-        sdk.on({
-            onStreamMessage: (uid, message) => {
-                console.log("Received message from", uid, ":", message);
-                //@ts-ignore
-                message.pld?.text?.length > 0 && setMessages((prev: any) => [...prev, message.pld]);
-            },
-            onException: (error) => {
-                console.error("An exception occurred:", error);
-            },
-            onMessageReceived: (message) => {
-                console.log("New message:", message);
-            },
-            onMessageUpdated: (message) => {
-                console.log("Message updated:", message);
-            },
-            onNetworkStatsUpdated: (stats) => {
-                console.log("Network stats:", stats);
-            },
-            onTokenWillExpire: () => {
-                console.log("Token will expire in 30s");
-            },
-            onTokenDidExpire: () => {
-                console.log("Token expired");
-            },
-            onUserPublished: async (user, mediaType) => {
-                if (mediaType === 'video') {
-                    await sdk.getClient().subscribe(user, mediaType);
-                    user?.videoTrack?.play(videoContainerRef.current)
-                } else if (mediaType === 'audio') {
-                    await sdk.getClient().subscribe(user, mediaType)
-                    user?.audioTrack?.play();
-                }
+            if (!response.ok) {
+                throw new Error('Failed to generate speech');
             }
-        });
 
-        setAgoraSdk(sdk);
+            const audioBlob = await response.blob();
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+            
+            // Stop any existing audio
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+            }
+            
+            setCurrentAudio(audio);
+            
+            audio.onended = () => {
+                setIsPlaying(false);
+                URL.revokeObjectURL(audioUrl);
+            };
 
-        return () => {
-            sdk.leaveChat();
-            sdk.leaveChannel();
-            sdk.closeStreaming();
+            audio.onerror = () => {
+                setIsPlaying(false);
+                toast.error('Error playing audio');
+                URL.revokeObjectURL(audioUrl);
+            };
+
+            if (!isMuted) {
+                await audio.play();
+            } else {
+                setIsPlaying(false);
+            }
+        } catch (error) {
+            console.error('Error speaking text:', error);
+            setIsPlaying(false);
+            toast.error('Failed to play audio');
+        }
+    };
+
+  const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
+    try {
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'recording.wav');
+
+      const response = await fetch('/api/elevenlabs/speech-to-text', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        
+        // Handle quota exceeded error
+        if (response.status === 429 && errorData.fallback) {
+          toast.error('OpenAI quota exceeded. Please add credits to your OpenAI account.');
+          throw new Error('OpenAI quota exceeded');
+        }
+        
+        throw new Error('Failed to transcribe audio');
+      }
+
+      const result = await response.json();
+      return result.text;
+    } catch (error) {
+      console.error('Error transcribing audio:', error);
+      throw error;
+    }
+  };
+
+    const askNextQuestion = async (): Promise<boolean> => {
+        if (!conversationManager) return false;
+
+        const question = await conversationManager.askNextQuestion();
+        if (!question) {
+            // Interview complete
+            await endInterview();
+            return false;
         }
 
-    }, [])
+        setCurrentQuestion(question);
+        await speakText(question);
+        
+        // Update conversation in database
+        await updateConversation({
+            recordId: interviewData!._id,
+            conversation: conversationManager.getConversation(),
+            currentQuestionIndex: conversationManager.getCurrentQuestionIndex()
+        });
 
-    const StartConversation = async () => {
+        return true;
+    };
 
-        if (!agoraSdk) return;
+    const startRecording = async () => {
+        try {
+            await audioRecorder.startRecording();
+            setIsRecording(true);
+            toast.success('Recording started');
+        } catch (error) {
+            console.error('Error starting recording:', error);
+            toast.error('Failed to start recording. Please check microphone permissions.');
+        }
+    };
+
+    const stopRecording = async () => {
+        try {
+            const audioBlob = await audioRecorder.stopRecording();
+            setIsRecording(false);
+            
+            // Convert to WAV for better compatibility
+            const wavBlob = await audioRecorder.convertToWav(audioBlob);
+            
+            // Transcribe audio
+            const transcription = await transcribeAudio(wavBlob);
+            
+            if (transcription.trim()) {
+                // Add user response to conversation
+                conversationManager?.addUserResponse(transcription);
+                
+                // Update conversation in database
+                await updateConversation({
+                    recordId: interviewData!._id,
+                    conversation: conversationManager?.getConversation() || [],
+                    currentQuestionIndex: conversationManager?.getCurrentQuestionIndex() || 0
+                });
+
+                // Ask next question
+                await askNextQuestion();
+            } else {
+                toast.warning('No speech detected. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error stopping recording:', error);
+            
+            // If transcription fails due to quota, offer text input fallback
+            if (error instanceof Error && error.message === 'OpenAI quota exceeded') {
+                toast.error('Speech-to-text unavailable. Please type your response instead.');
+                setShowTextInput(true);
+            } else {
+                toast.error('Failed to process recording');
+            }
+        }
+    };
+
+    const submitTextResponse = async () => {
+        if (!textResponse.trim()) {
+            toast.error('Please enter your response');
+            return;
+        }
 
         try {
-            setLoading(true);
-            //Create AKool Session
-            const result = await axios.post('/api/akool-session', {
-                avatar_id: AVATAR_ID,
-                knowledge_id: kbId
+            // Add user response to conversation
+            conversationManager?.addUserResponse(textResponse.trim());
+            
+            // Update conversation in database
+            await updateConversation({
+                recordId: interviewData!._id,
+                conversation: conversationManager?.getConversation() || [],
+                currentQuestionIndex: conversationManager?.getCurrentQuestionIndex() || 0
             });
 
-            console.log(result.data);
-            const credentials = result?.data?.data?.credentials
-            //Connect to Agora Channel and Start Chat
-            if (!credentials) throw new Error("Missing Credentials");
+            // Clear text input and hide it
+            setTextResponse('');
+            setShowTextInput(false);
 
-            await agoraSdk?.joinChannel({
-                agora_app_id: credentials.agora_app_id,
-                agora_channel: credentials.agora_channel,
-                agora_token: credentials.agora_token,
-                agora_uid: credentials.agora_uid
-            });
-
-            await agoraSdk.joinChat({
-                vid: "female_en_1",
-                lang: "en",
-                mode: 2 // 1 for repeat mode, 2 for dialog mode
-            });
-
-
-
-            const Prompt = `
-            You are a friendly and professional job interviewer.
-            Ask the user one interview question at a time.
-            Wait for their spoken response before asking the next.
-            Start with: "Tell me about yourself."
-            Then proceed with the following questions in order:
-            ${interviewData?.interviewQuestions.map((q: any) => q.question).join("\n")}
-            After the user responds, ask the next question in the list. Do not repeat previous questions.
-            `
-
-            await agoraSdk.sendMessage(Prompt);
-
-            await agoraSdk.toggleMic();
-            setMicOn(true);
-            setJoined(true);
+            // Ask next question
+            await askNextQuestion();
+        } catch (error) {
+            console.error('Error submitting text response:', error);
+            toast.error('Failed to submit response');
         }
-        catch (e) {
+    };
 
+    const startInterviewSession = async () => {
+        try {
+            setLoading(true);
+            
+            // Mark interview as started
+            await startInterview({
+                recordId: interviewData!._id
+            });
+
+            // Start with first question
+            await askNextQuestion();
+            
+            toast.success('Interview started!');
+        } catch (error) {
+            console.error('Error starting interview:', error);
+            toast.error('Failed to start interview');
         } finally {
             setLoading(false);
-
         }
-    }
+    };
 
-    const leaveConversation = async () => {
-        if (!agoraSdk) return;
-        await agoraSdk.leaveChat();
-        await agoraSdk.leaveChannel();
-        await agoraSdk.closeStreaming();
-        setJoined(false);
-        setMicOn(false);
+    const endInterview = async () => {
+        try {
+            setLoading(true);
+            
+            // Stop any playing audio
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+            }
 
-        await GenerateFeedback();
-    }
+            // Generate feedback
+            const conversation = conversationManager?.getConversation() || [];
+            const response = await axios.post('/api/interview-feedback', {
+                messages: conversation
+            });
 
-    const toggleMic = async () => {
-        if (!agoraSdk) return;
-        await agoraSdk?.toggleMic();
-        setMicOn(agoraSdk?.isMicEnabled())
-    }
+            const feedback = response.data;
 
-    useEffect(() => {
-        console.log(JSON.stringify(messages))
-    }, [messages])
+            // Update interview with feedback
+            await updateFeedback({
+                recordId: interviewData!._id,
+                feedback: feedback
+            });
 
-    const GenerateFeedback = async () => {
-        toast.warning('Generating Feedback, Please Wait...')
-        const result = await axios.post('/api/interview-feedback', {
-            messages: DUMMY_COVERSATION
-        });
-        console.log(result.data);
-        toast.success('Feedback Ready!')
-        //Save the feedback
-        const resp = await updateFeedback({
-            feedback: result.data,
-            //@ts-ignore
-            recordId: interviewId
-        });
-        console.log(resp);
-        toast.success('Interview Completed!');
+            toast.success('Interview completed!');
+            
+            // Redirect to results
+            router.push(`/interview/${interviewId}/results`);
+        } catch (error) {
+            console.error('Error ending interview:', error);
+            toast.error('Failed to complete interview');
+        } finally {
+            setLoading(false);
+        }
+    };
 
-        //Navigate
-        router.replace('/dashboard');
-    }
+    const toggleMute = () => {
+        setIsMuted(!isMuted);
+        if (currentAudio) {
+            currentAudio.muted = !isMuted;
+        }
+    };
 
-
-
-
+    const progress = conversationManager?.getProgress() || { current: 0, total: 0, percentage: 0 };
 
     return (
-        <div className='flex flex-col lg:flex-row w-full min-h-screen bg-gray-50'>
-            <div className='flex flex-col items-center p-6 lg:w-2/3 '>
-                <h2 className='text-2xl font-bold mb-6'>Interview Sessions</h2>
-                <div ref={videoContainerRef}
-                    id={CONTAINER_ID}
-                    className='rounded-2xl overflow-hidden border bg-white flex items-center justify-center'
-                    style={{
-                        width: 640,
-                        height: 480,
-
-                        marginTop: 20
-                    }}
-                >
-                    {!joined && (
-                        <div>
-                            <div>
-                                <User size={40} className='text-gray-500' />
-                            </div>
-                        </div>
-                    )}
+        <div className="min-h-screen bg-gray-50 py-8 px-4">
+            <div className="max-w-4xl mx-auto">
+                {/* Header */}
+                <div className="text-center mb-8">
+                    <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                        {interviewData?.jobTitle || 'AI Interview'}
+                    </h1>
+                    <p className="text-gray-600">
+                        {interviewData?.jobDescription || 'Voice-based interview session'}
+                    </p>
                 </div>
-                <div className="mt-6 flex space-x-4">
-                    {!joined ? (
-                        <button
-                            onClick={StartConversation}
-                            disabled={loading}
-                            className="flex items-center px-5 py-3 bg-green-500 text-white hover:bg-green-400 rounded-full shadow-lg transition disabled:opacity-50"
-                        >
-                            <PhoneCall className="mr-2" size={20} />
-                            {loading ? "Connecting..." : "Connect Call"}
-                        </button>
-                    ) : (
-                        <>
-                            <button
-                                onClick={toggleMic}
-                                className={`flex items-center px-5 py-3 rounded-full shadow-lg transition ${micOn
-                                    ? "bg-yellow-400 hover:bg-yellow-300 text-white"
-                                    : "bg-gray-300 hover:bg-gray-200 text-gray-800"
+
+                {/* Progress Bar */}
+                <div className="mb-8">
+                    <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium text-gray-700">
+                            Question {progress.current} of {progress.total}
+                        </span>
+                        <span className="text-sm text-gray-500">
+                            {progress.percentage}% Complete
+                        </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${progress.percentage}%` }}
+                        ></div>
+                    </div>
+                </div>
+
+                {/* Current Question */}
+                {currentQuestion && (
+                    <div className="bg-white rounded-lg p-6 mb-8 shadow-sm">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Current Question:</h3>
+                        <p className="text-gray-700 text-lg leading-relaxed">{currentQuestion}</p>
+                    </div>
+                )}
+
+                {/* Conversation History */}
+                {conversationManager?.getConversation() && conversationManager.getConversation().length > 0 && (
+                    <div className="bg-white rounded-lg p-6 mb-8 shadow-sm">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Conversation:</h3>
+                        <div className="space-y-4 max-h-64 overflow-y-auto">
+                            {conversationManager.getConversation().map((message, index) => (
+                                <div 
+                                    key={index} 
+                                    className={`p-3 rounded-lg ${
+                                        message.from === 'bot' 
+                                            ? 'bg-blue-50 border-l-4 border-blue-400' 
+                                            : 'bg-green-50 border-l-4 border-green-400'
                                     }`}
-                            >
-                                {micOn ? (
-                                    <>
-                                        <Mic className="mr-2" size={20} /> Mute
-                                    </>
-                                ) : (
-                                    <>
-                                        <MicOff className="mr-2" size={20} /> Unmute
-                                    </>
-                                )}
-                            </button>
-                            <button
-                                onClick={leaveConversation}
-                                className="flex items-center px-5 py-3 bg-red-500 hover:bg-red-400 text-white rounded-full shadow-lg transition"
-                            >
-                                <PhoneOff className="mr-2" size={20} /> End Call
-                            </button>
-                        </>
-                    )}
-                </div>
-
-
-            </div>
-            <div className='flex flex-col p-6 lg:w-1/3 h-screen overflow-auto'>
-                <h2 className='text-lg font-semibold my-4'>Conversation</h2>
-                <div className='flex-1  border bg-white border-gray-200 rounded-xl p-4 space-y-3'>
-                    {messages?.length == 0 ?
-                        <div>
-                            <p>No Messages yet</p>
-                        </div>
-                        :
-                        <div>
-                            {messages?.map((msg, index) => (
-                                <div key={index}>
-                                    <h2 className={`p-3  rounded-lg max-w-[80%] mt-1
-                                        ${msg.from == 'user' ? "bg-blue-100 text-blue-700 self-start" :
-                                            "bg-green-100 text-green-700 self-end "}
-                                        
-                                        `}>{msg.text}</h2>
+                                >
+                                    <div className="flex justify-between items-start">
+                                        <span className="font-medium text-sm text-gray-600">
+                                            {message.from === 'bot' ? 'Interviewer' : 'You'}
+                                        </span>
+                                        <span className="text-xs text-gray-500">
+                                            {new Date(message.timestamp).toLocaleTimeString()}
+                                        </span>
+                                    </div>
+                                    <p className="text-gray-800 mt-1">{message.text}</p>
                                 </div>
                             ))}
                         </div>
-                    }
+                    </div>
+                )}
+
+                {/* Controls */}
+                <div className="bg-white rounded-lg p-6 shadow-sm">
+                    <div className="flex flex-col items-center space-y-4">
+                        {/* Status */}
+                        <div className="text-center">
+                            {isPlaying && (
+                                <p className="text-blue-600 font-medium">🎤 Interviewer is speaking...</p>
+                            )}
+                            {isRecording && (
+                                <p className="text-red-600 font-medium">🔴 Recording your response...</p>
+                            )}
+                            {!isPlaying && !isRecording && !currentQuestion && (
+                                <p className="text-gray-600">Click "Start Interview" to begin</p>
+                            )}
+                            {!isPlaying && !isRecording && currentQuestion && (
+                                <p className="text-gray-600">Click the microphone to record your answer</p>
+                            )}
+                        </div>
+
+                        {/* Control Buttons */}
+                        <div className="flex items-center space-x-4">
+                            {/* Start Interview Button */}
+                            {!currentQuestion && (
+                                <Button 
+                                    onClick={startInterviewSession}
+                                    disabled={loading}
+                                    size="lg"
+                                    className="bg-blue-600 hover:bg-blue-700"
+                                >
+                                    {loading ? 'Starting...' : 'Start Interview'}
+                                </Button>
+                            )}
+
+                            {/* Recording Button */}
+                            {currentQuestion && !conversationManager?.isComplete() && !showTextInput && (
+                                <Button
+                                    onClick={isRecording ? stopRecording : startRecording}
+                                    disabled={isPlaying || loading}
+                                    size="lg"
+                                    className={`${
+                                        isRecording 
+                                            ? 'bg-red-600 hover:bg-red-700' 
+                                            : 'bg-green-600 hover:bg-green-700'
+                                    }`}
+                                >
+                                    {isRecording ? (
+                                        <>
+                                            <MicOff className="w-5 h-5 mr-2" />
+                                            Stop Recording
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Mic className="w-5 h-5 mr-2" />
+                                            Record Answer
+                                        </>
+                                    )}
+                                </Button>
+                            )}
+
+                            {/* Text Input Fallback */}
+                            {showTextInput && (
+                                <div className="flex items-center space-x-2">
+                                    <Input
+                                        value={textResponse}
+                                        onChange={(e) => setTextResponse(e.target.value)}
+                                        placeholder="Type your response here..."
+                                        className="min-w-64"
+                                        onKeyPress={(e) => e.key === 'Enter' && submitTextResponse()}
+                                    />
+                                    <Button
+                                        onClick={submitTextResponse}
+                                        disabled={loading}
+                                        size="lg"
+                                        className="bg-blue-600 hover:bg-blue-700"
+                                    >
+                                        Submit
+                                    </Button>
+                                </div>
+                            )}
+
+                            {/* End Interview Button */}
+                            {conversationManager?.isComplete() && (
+                                <Button
+                                    onClick={endInterview}
+                                    disabled={loading}
+                                    size="lg"
+                                    className="bg-gray-600 hover:bg-gray-700"
+                                >
+                                    {loading ? 'Completing...' : 'End Interview'}
+                                </Button>
+                            )}
+
+                            {/* Mute Button */}
+                            <Button
+                                onClick={toggleMute}
+                                variant="outline"
+                                size="lg"
+                            >
+                                {isMuted ? (
+                                    <>
+                                        <VolumeX className="w-5 h-5 mr-2" />
+                                        Unmute
+                                    </>
+                                ) : (
+                                    <>
+                                        <Volume2 className="w-5 h-5 mr-2" />
+                                        Mute
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+
+                        {/* Instructions */}
+                        <div className="text-center text-sm text-gray-500 max-w-md">
+                            <p>
+                                {!currentQuestion && "Make sure your microphone is working before starting."}
+                                {currentQuestion && !isRecording && !showTextInput && "Listen to the question, then click the microphone to record your answer."}
+                                {isRecording && "Speak clearly into your microphone. Click stop when you're done."}
+                                {showTextInput && "Speech-to-text is unavailable. Please type your response and press Enter or click Submit."}
+                                {conversationManager?.isComplete() && "Interview completed! Click 'End Interview' to generate feedback."}
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
