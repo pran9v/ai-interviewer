@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useConvex } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel'
 
 function EditQuestionsPage() {
   const { interviewId } = useParams();
@@ -26,7 +27,7 @@ function EditQuestionsPage() {
       setError('');
       try {
         const result = await convex.query(api.Interview.GetInterviewQuestions, {
-          interviewRecordId: id
+          interviewRecordId: id as Id<'InterviewSessionTable'>
         });
         setQuestions((result?.interviewQuestions || []).map(q => q.question || q));
         // Basic interviewer check: current user === interviewData.userId (add your own method)
@@ -50,7 +51,7 @@ function EditQuestionsPage() {
     setError('');
     try {
       await convex.mutation(api.Interview.UpdateInterviewQuestions, {
-        recordId: id,
+        recordId: id as Id<'InterviewSessionTable'>,
         questions: questions.filter(q => q).map(q => ({ question: q }))
       });
     } catch (e) {
