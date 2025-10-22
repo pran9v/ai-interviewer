@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useConvex } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { Spinner } from '@/components/ui/skeleton';
 
 function EditQuestionsPage() {
   const { interviewId } = useParams();
@@ -59,7 +58,7 @@ function EditQuestionsPage() {
     setSaving(false);
   };
 
-  if (loading) return <Spinner/>;
+  if (loading) return <div className="p-10 text-center"><div className="animate-pulse w-8 h-8 bg-gray-200 rounded-full mx-auto mb-4" /><div>Loading...</div></div>;
   if (!isInterviewer) return <div className="p-8 text-center">Access denied: you are not the interviewer for this session.</div>;
 
   return (
