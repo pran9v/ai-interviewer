@@ -29,7 +29,11 @@ function EditQuestionsPage() {
         const result = await convex.query(api.Interview.GetInterviewQuestions, {
           interviewRecordId: id as Id<'InterviewSessionTable'>
         });
-        setQuestions((result?.interviewQuestions || []).map(q => q.question || q));
+        setQuestions(
+          ((result?.interviewQuestions || []) as Array<{ question: string } | string>).map(
+            (q) => (typeof q === 'string' ? q : q.question)
+          )
+        );
         // Basic interviewer check: current user === interviewData.userId (add your own method)
         const currentUser = await convex.session.getCurrentUser?.();
         setIsInterviewer(currentUser && result?.userId && currentUser._id === result.userId);
