@@ -8,6 +8,7 @@ import { api } from '@/convex/_generated/api';
 
 function EditQuestionsPage() {
   const { interviewId } = useParams();
+  const id = Array.isArray(interviewId) ? interviewId[0] : interviewId;
   const convex = useConvex();
   const router = useRouter();
 
@@ -18,14 +19,14 @@ function EditQuestionsPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!interviewId) return;
+    if (!id) return;
     // Fetch the interview data (and do a simple role check)
     (async () => {
       setLoading(true);
       setError('');
       try {
         const result = await convex.query(api.Interview.GetInterviewQuestions, {
-          interviewRecordId: interviewId
+          interviewRecordId: id
         });
         setQuestions((result?.interviewQuestions || []).map(q => q.question || q));
         // Basic interviewer check: current user === interviewData.userId (add your own method)
@@ -36,7 +37,7 @@ function EditQuestionsPage() {
       }
       setLoading(false);
     })();
-  }, [interviewId]);
+  }, [id]);
 
   const handleQuestionChange = (idx: number, val: string) => {
     setQuestions(qs => qs.map((q, i) => i === idx ? val : q));
@@ -49,7 +50,7 @@ function EditQuestionsPage() {
     setError('');
     try {
       await convex.mutation(api.Interview.UpdateInterviewQuestions, {
-        recordId: interviewId,
+        recordId: id,
         questions: questions.filter(q => q).map(q => ({ question: q }))
       });
     } catch (e) {
