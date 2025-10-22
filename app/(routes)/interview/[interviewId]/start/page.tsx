@@ -75,6 +75,13 @@ function StartInterview() {
         }
     }, [interviewData])
 
+    useEffect(() => {
+        // Automatically start recording when a new question comes up
+        if (currentQuestion && !conversationManager?.isComplete() && !showTextInput && !isRecording) {
+            startRecording();
+        }
+    }, [currentQuestion, conversationManager, showTextInput]);
+
     const speakText = async (text: string): Promise<void> => {
         try {
             setIsPlaying(true);
@@ -405,9 +412,6 @@ function StartInterview() {
                             {!isPlaying && !isRecording && !currentQuestion && (
                                 <p className="text-gray-600">Click "Start Interview" to begin</p>
                             )}
-                            {!isPlaying && !isRecording && currentQuestion && (
-                                <p className="text-gray-600">Click the microphone to record your answer</p>
-                            )}
                         </div>
 
                         {/* Control Buttons */}
@@ -423,33 +427,7 @@ function StartInterview() {
                                     {loading ? 'Starting...' : 'Start Interview'}
                                 </Button>
                             )}
-
-                            {/* Recording Button */}
-                            {currentQuestion && !conversationManager?.isComplete() && !showTextInput && (
-                                <Button
-                                    onClick={isRecording ? stopRecording : startRecording}
-                                    disabled={isPlaying || loading}
-                                    size="lg"
-                                    className={`${
-                                        isRecording 
-                                            ? 'bg-red-600 hover:bg-red-700' 
-                                            : 'bg-green-600 hover:bg-green-700'
-                                    }`}
-                                >
-                                    {isRecording ? (
-                                        <>
-                                            <MicOff className="w-5 h-5 mr-2" />
-                                            Stop Recording
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Mic className="w-5 h-5 mr-2" />
-                                            Record Answer
-                                        </>
-                                    )}
-                                </Button>
-                            )}
-
+                            {/* RECORDING BUTTON REMOVED */}
                             {/* Text Input Fallback */}
                             {showTextInput && (
                                 <div className="flex items-center space-x-2">
@@ -470,7 +448,6 @@ function StartInterview() {
                                     </Button>
                                 </div>
                             )}
-
                             {/* End Interview Button */}
                             {conversationManager?.isComplete() && (
                                 <Button
@@ -482,7 +459,6 @@ function StartInterview() {
                                     {loading ? 'Completing...' : 'End Interview'}
                                 </Button>
                             )}
-
                             {/* Mute Button */}
                             <Button
                                 onClick={toggleMute}
@@ -502,13 +478,12 @@ function StartInterview() {
                                 )}
                             </Button>
                         </div>
-
                         {/* Instructions */}
                         <div className="text-center text-sm text-gray-500 max-w-md">
                             <p>
                                 {!currentQuestion && "Make sure your microphone is working before starting."}
-                                {currentQuestion && !isRecording && !showTextInput && "Listen to the question, then click the microphone to record your answer."}
-                                {isRecording && "Speak clearly into your microphone. Click stop when you're done."}
+                                {currentQuestion && !isRecording && !showTextInput && "Interview is live. Your answers will be automatically recorded."}
+                                {isRecording && "Speak clearly into your microphone. Recording is automatic for each response."}
                                 {showTextInput && "Speech-to-text is unavailable. Please type your response and press Enter or click Submit."}
                                 {conversationManager?.isComplete() && "Interview completed! Click 'End Interview' to generate feedback."}
                             </p>

@@ -83,6 +83,18 @@ export const UpdateConversation = mutation({
     }
 })
 
+export const UpdateInterviewQuestions = mutation({
+  args: {
+    recordId: v.id('InterviewSessionTable'),
+    questions: v.any()
+  },
+  handler: async (ctx, args) => {
+    return ctx.db.patch(args.recordId, {
+      interviewQuestions: args.questions
+    });
+  }
+});
+
 export const GetInterviewList = query({
     args: {
         uid: v.id('UserTable')

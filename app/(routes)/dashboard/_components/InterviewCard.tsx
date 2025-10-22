@@ -18,9 +18,17 @@ function InterviewCard({ interviewInfo }: props) {
 
             <div className='mt-5 flex justify-between items-center'>
                 {interviewInfo?.feedback && <FeedbackDialog feedbackInfo={interviewInfo.feedback} />}
-                <Link href={'/interview/' + interviewInfo?._id}>
-                    <Button className='' variant={'outline'}>Start Interview <ArrowRight /></Button>
-                </Link>
+                <div className="flex gap-2">
+                  <Link href={'/interview/' + interviewInfo?._id}>
+                      <Button className='' variant={'outline'}>Start Interview <ArrowRight /></Button>
+                  </Link>
+                  {/* Only show Edit if status is 'draft' for now */}
+                  {interviewInfo?.status === 'draft' && (
+                    <Link href={`/interview/${interviewInfo._id}/edit-questions`}>
+                      <Button className='' variant={'secondary'}>Edit Questions</Button>
+                    </Link>
+                  )}
+                </div>
             </div>
         </div>
     )
