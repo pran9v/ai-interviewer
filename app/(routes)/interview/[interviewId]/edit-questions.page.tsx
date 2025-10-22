@@ -6,12 +6,14 @@ import { Button } from '@/components/ui/button';
 import { useConvex } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel'
+import { useUser } from '@clerk/nextjs';
 
 function EditQuestionsPage() {
   const { interviewId } = useParams();
   const id = Array.isArray(interviewId) ? interviewId[0] : interviewId;
   const convex = useConvex();
   const router = useRouter();
+  const { user } = useUser();
 
   const [questions, setQuestions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,9 +36,8 @@ function EditQuestionsPage() {
             (q) => (typeof q === 'string' ? q : q.question)
           )
         );
-        // Basic interviewer check: current user === interviewData.userId (add your own method)
-        const currentUser = await convex.session.getCurrentUser?.();
-        setIsInterviewer(currentUser && result?.userId && currentUser._id === result.userId);
+        // Basic interviewer check: current user === interviewData.userId
+        setIsInterviewer(!!(user && result?.userId && user.id === result.userId));
       } catch (e) {
         setError('Could not load interview data.');
       }
@@ -82,7 +83,7 @@ function EditQuestionsPage() {
       ))}
       <div className="flex gap-4 mt-6">
         <Button onClick={handleAdd} variant="outline">Add Question</Button>
-        <Button onClick={handleSave} loading={saving} disabled={saving}>Save All</Button>
+        <Button onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save All"}</Button>
         <Button variant="ghost" onClick={() => router.back()}>Cancel</Button>
       </div>
       {error && <div className="mt-4 text-red-600">{error}</div>}
