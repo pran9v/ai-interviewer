@@ -193,6 +193,14 @@ function EditQuestionsPage() {
           >
             {saving ? "Saving..." : hasChanges ? "Save Changes" : "No Changes"}
           </Button>
+          {/* Proceed to Start Interview; require saving first to ensure edits are persisted */}
+          <Button
+            onClick={() => router.push(`/interview/${id}`)}
+            disabled={hasChanges || saving}
+            variant="outline"
+          >
+            {hasChanges ? 'Save before starting' : 'Proceed to Start Interview'}
+          </Button>
         </div>
       </div>
 

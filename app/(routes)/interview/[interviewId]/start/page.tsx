@@ -466,6 +466,17 @@ function StartInterview() {
                                     {loading ? 'Completing...' : 'End Interview'}
                                 </Button>
                             )}
+
+                            {/* Manual Stop Recording Button (visible while recording) */}
+                            {isRecording && (
+                                <Button
+                                    onClick={stopRecording}
+                                    size="lg"
+                                    className="bg-red-600 hover:bg-red-700"
+                                >
+                                    Stop Recording & Next
+                                </Button>
+                            )}
                             {/* Mute Button */}
                             <Button
                                 onClick={toggleMute}

@@ -64,7 +64,9 @@ function CreateInterviewDialog() {
                 jobDescription: formData?.jobDescription ?? ''
             });
 
-            router.push('/interview/' + interviewId);
+            // After creating the interview, send the user to the edit-questions screen
+            // so an admin/interviewer can review generated questions before starting.
+            router.push(`/interview/${interviewId}/edit-questions`);
 
         } catch (e) {
             console.log(e);
