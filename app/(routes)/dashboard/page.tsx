@@ -14,23 +14,32 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 
 function Dashboard() {
-    const { user } = useUser();
+    const { user, isLoaded: isUserLoaded } = useUser();
     const [interviewList, setInterviewList] = useState<InterviewData[]>([]);
-    const { userDetail, setUserDetail } = useContext(UserDetailContext);
+    const { userDetail } = useContext(UserDetailContext);
     const convex = useConvex();
     const [loading, setLoading] = useState(true);
+
     useEffect(() => {
-        userDetail && GetInterviewList();
-    }, [userDetail])
+        if (userDetail?._id) {
+            GetInterviewList();
+        } else {
+            setLoading(false);
+        }
+    }, [userDetail?._id]);
 
     const GetInterviewList = async () => {
+        if (!userDetail?._id) return;
+        
         setLoading(true);
-        const result = await convex.query(api.Interview.GetInterviewList, {
-            uid: userDetail?._id
-        });
-        console.log(result);
-        //@ts-ignore
-        setInterviewList(result);
+        try {
+            const result = await convex.query(api.Interview.GetInterviewList, {
+                uid: userDetail._id as any // TODO: Fix type properly in the Convex schema
+            });
+            setInterviewList(result as InterviewData[]);
+        } catch (error) {
+            console.error('Error fetching interview list:', error);
+        }
         setLoading(false);
     }
 
