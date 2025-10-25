@@ -10,9 +10,7 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog"
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import ResumeUpload from './ResumeUpload'
-import JobDescription from './JobDescription'
+import { Input } from '@/components/ui/input'
 import axios from 'axios'
 import { Loader2Icon } from 'lucide-react'
 import { useMutation } from 'convex/react'
@@ -22,8 +20,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 function CreateInterviewDialog() {
 
-    const [formData, setFormData] = useState<any>();
-    const [file, setFile] = useState<File | null>();
+    const [formData, setFormData] = useState<any>({ jobTitle: '' });
     const [loading, setLoading] = useState(false);
     const { userDetail, setUserDetail } = useContext(UserDetailContext);
     const saveInterviewQuestion = useMutation(api.Interview.SaveInterviewQuestion)
@@ -36,19 +33,14 @@ function CreateInterviewDialog() {
     }
 
     const onSubmit = async () => {
-        if (!formData?.jobTitle || !formData?.jobDescription) {
-            toast.error('Please fill in both job title and description');
+        if (!formData.jobTitle || !formData.jobTitle.trim()) {
+            toast.error('Please enter a job title');
             return;
         }
 
         setLoading(true);
-        const formData_ = new FormData();
-        formData_.append('file', file ?? '');
-        formData_.append('jobTitle', formData.jobTitle);
-        formData_.append('jobDescription', formData.jobDescription);
-
         try {
-            const res = await axios.post('/api/generate-interview-questions', formData_);
+            const res = await axios.post('/api/generate-interview-questions', { jobTitle: formData.jobTitle });
             console.log('API Response:', res.data);
 
             if (res?.data?.status === 429) {
@@ -69,14 +61,10 @@ function CreateInterviewDialog() {
             // Save to Database
             const interviewId = await saveInterviewQuestion({
                 questions: res.data.questions,
-                resumeUrl: res.data.resumeUrl ?? '',
+                resumeUrl: undefined,
                 uid: userDetail._id as any,
                 jobTitle: formData.jobTitle,
-                jobDescription: formData.jobDescription
-            }).catch(error => {
-                console.error('Error saving interview:', error);
-                toast.error('Could not save questions. Please try again.');
-                throw error; // Re-throw to be caught by outer catch
+                jobDescription: undefined
             });
 
                         // Normalize returned id (Convex can return different shapes).
@@ -140,14 +128,14 @@ function CreateInterviewDialog() {
                 <DialogHeader>
                     <DialogTitle>Please submit following details.</DialogTitle>
                     <DialogDescription>
-                        <Tabs defaultValue="resume-upload" className="w-full mt-5">
-                            <TabsList>
-                                <TabsTrigger value="resume-upload">Resume Upload</TabsTrigger>
-                                <TabsTrigger value="job-description">Job Description</TabsTrigger>
-                            </TabsList>
-                            <TabsContent value="resume-upload"><ResumeUpload setFiles={(file: any) => setFile(file)} /></TabsContent>
-                            <TabsContent value="job-description"><JobDescription onHandleInputChange={onHandleInputChange} /></TabsContent>
-                        </Tabs>
+                        <div className="w-full mt-4">
+                            <label className="block mb-2 text-sm font-medium text-gray-700">Job Title</label>
+                            <Input
+                                placeholder="Enter job title (e.g. Software Engineer)"
+                                value={formData.jobTitle}
+                                onChange={(e) => onHandleInputChange('jobTitle', e.target.value)}
+                            />
+                        </div>
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter className='flex gap-6'>
