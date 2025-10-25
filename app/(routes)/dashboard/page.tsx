@@ -5,7 +5,6 @@ import React, { useContext, useEffect, useState } from 'react'
 
 import CreateInterviewDialog from '../_components/CreateInterviewDialog';
 import { useConvex } from 'convex/react';
-import { useUserDetailContext } from '@/app/Provider';
 import { UserDetailContext } from '@/context/UserDetailContext';
 import { api } from '@/convex/_generated/api';
 import { InterviewData } from '../interview/[interviewId]/start/page';
