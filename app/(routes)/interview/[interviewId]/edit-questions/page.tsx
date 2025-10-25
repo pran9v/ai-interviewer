@@ -7,6 +7,8 @@ import { useConvex } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel'
 import { useUser } from '@clerk/nextjs';
+import { useContext } from 'react';
+import { UserDetailContext } from '@/context/UserDetailContext';
 import { toast } from 'sonner';
 
 interface InterviewQuestion {
@@ -57,9 +59,13 @@ function EditQuestionsPage() {
         setQuestions(normalizedQuestions);
         setOriginalQuestions(normalizedQuestions);
         
-        // Check if user is interviewer or admin
-        const isAdmin = user?.publicMetadata?.role === 'admin';
-        setIsInterviewer(isAdmin || !!(user && result.userId && user.id === result.userId));
+  // Check if user is interviewer or admin
+  const isAdmin = (user?.publicMetadata?.role === 'admin') || (user?.unsafeMetadata?.role === 'admin');
+  // userDetail contains the Convex user record created in Provider (with _id)
+  const { userDetail } = useContext(UserDetailContext) as any || {};
+  // Compare Convex user id (userDetail._id) to interview record's userId
+  const isOwner = !!(userDetail && result.userId && userDetail._id === result.userId);
+  setIsInterviewer(isAdmin || isOwner);
       } catch (e) {
         console.error('Error loading interview:', e);
         setError('Could not load interview data. Please try again.');
