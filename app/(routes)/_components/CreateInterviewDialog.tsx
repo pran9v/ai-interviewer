@@ -53,12 +53,16 @@ function CreateInterviewDialog() {
                 return;
             }
 
+            if (!userDetail?._id) {
+                toast.error('User session not found');
+                return;
+            }
+
             //Save to Database
-            //@ts-ignore
             const interviewId = await saveInterviewQuestion({
                 questions: res.data?.questions,
                 resumeUrl: res?.data.resumeUrl ?? '',
-                uid: userDetail?._id,
+                uid: userDetail._id as any, // Cast to any since Convex types are generated
                 jobTitle: formData?.jobTitle ?? '',
                 jobDescription: formData?.jobDescription ?? ''
             });
