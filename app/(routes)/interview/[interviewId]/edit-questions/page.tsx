@@ -110,10 +110,16 @@ function EditQuestionsPage() {
       const message = e?.message || (typeof e === 'string' ? e : JSON.stringify(e));
       const details = e?.response?.data ?? e?.details ?? null;
       const display = details ? `${message} - ${JSON.stringify(details)}` : message;
-      setError(`Could not save questions. ${display}`);
-      try {
-        toast.error(`Save failed: ${message}`);
-      } catch (_) {}
+
+      // Detect common Convex deployment error and provide actionable guidance
+      if (message && message.includes("Could not find public function")) {
+        const guidance = `Convex backend function missing. This usually means the Convex functions haven't been deployed or the generated API is out of date. Run \`npx convex deploy\` (for production) or \`npx convex dev\` (for local development) in your convex/ directory and redeploy. See https://docs.convex.dev for details.`;
+        setError(`Could not save questions. ${display}. ${guidance}`);
+        try { toast.error('Convex function missing — check server logs. See console for full message.'); } catch (_) {}
+      } else {
+        setError(`Could not save questions. ${display}`);
+        try { toast.error(`Save failed: ${message}`); } catch (_) {}
+      }
     }
     setSaving(false);
   };
