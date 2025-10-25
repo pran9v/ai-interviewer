@@ -1,26 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import ImageKit from "imagekit";
 import axios from "axios";
 import { aj } from "@/utils/arcjet";
 import { auth, currentUser } from "@clerk/nextjs/server";
 
-// Check if required environment variables are present
-if (!process.env.NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY || !process.env.IMAGEKIT_PRIVATE_KEY || !process.env.NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT) {
-    throw new Error('ImageKit environment variables are not properly configured. Please check your .env file.');
-}
-
-const imagekit = new ImageKit({
-    publicKey: process.env.NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY,
-    privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
-    urlEndpoint: process.env.NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT,
-});
 export async function POST(req: NextRequest) {
     try {
         const user = await currentUser();
-        const formData = await req.formData();
-        const file = formData.get('file') as File;
-        const jobTitle = formData.get('jobTitle') as File;
-        const jobDescription = formData.get('jobDescription') as File;
+        const body = await req.json();
+        const jobTitle = (body.jobTitle as string | undefined) ?? (body?.title as string | undefined);
+
+        console.log('generate-interview-questions called by', user?.primaryEmailAddress?.emailAddress, 'body:', body);
+
+        if (!jobTitle || !jobTitle.trim()) {
+            console.warn('generate-interview-questions: missing jobTitle');
+            return NextResponse.json({ error: 'Missing jobTitle' }, { status: 400 });
+        }
+
         const { has } = await auth();
         const decision = await aj.protect(req, { userId: user?.primaryEmailAddress?.emailAddress ?? '', requested: 5 }); // Deduct 5 tokens from the bucket
         console.log("Arcjet decision", decision);
@@ -33,48 +28,31 @@ export async function POST(req: NextRequest) {
             })
         }
 
-        if (file) {
-            console.log("file", formData)
-            const arrayBuffer = await file.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
-
-
-            const uploadResponse = await imagekit.upload({
-                file: buffer,
-                fileName: `upload-${Date.now()}.pdf`,
-                isPrivateFile: false, // optional
-                useUniqueFileName: true,
-            });
-
-
-            // Call n8n Webhook 
-
+        // Call n8n Webhook with jobTitle only
+        try {
             const result = await axios.post('https://n8n.srv629238.hstgr.cloud/webhook/generate-interview-question', {
-                resumeUrl: uploadResponse?.url
-            });
-            console.log(result.data)
+                jobTitle: jobTitle
+            }, { timeout: 20000 });
 
-            return NextResponse.json({
-                questions: result.data?.message?.content?.questions || result.data?.message?.content?.interview_questions,
-                resumeUrl: uploadResponse?.url,
-                status: 200
-            });
-        } else {
-            const result = await axios.post('https://n8n.srv629238.hstgr.cloud/webhook/generate-interview-question', {
-                resumeUrl: null,
-                jobTitle: jobTitle,
-                jobDescription: jobDescription
-            });
-            console.log(result.data)
+            console.log('n8n webhook response:', result.status, result.data);
 
-            return NextResponse.json({
-                questions: result.data?.message?.content?.questions,
-                resumeUrl: null
-            });
+            const questions = result.data?.message?.content?.questions || result.data?.message?.content?.interview_questions || result.data?.questions;
+
+            if (!questions) {
+                console.warn('Webhook did not return questions, payload:', result.data);
+                return NextResponse.json({ error: 'No questions returned from generation service', details: result.data }, { status: 502 });
+            }
+
+            return NextResponse.json({ questions, status: 200 });
+        } catch (err: any) {
+            console.error('Error calling generation webhook:', err?.response?.status, err?.response?.data || err.message);
+            const status = err?.response?.status || 502;
+            const details = err?.response?.data || { message: err?.message };
+            return NextResponse.json({ error: 'Generation service failed', details }, { status });
         }
 
     } catch (error: any) {
-        console.error('Upload error:', error);
+        console.error('Generate questions error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
