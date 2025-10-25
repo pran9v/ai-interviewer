@@ -36,20 +36,28 @@ function CreateInterviewDialog() {
     }
 
     const onSubmit = async () => {
+        if (!formData?.jobTitle || !formData?.jobDescription) {
+            toast.error('Please fill in both job title and description');
+            return;
+        }
 
         setLoading(true);
         const formData_ = new FormData();
         formData_.append('file', file ?? '');
-        formData_?.append('jobTitle', formData?.jobTitle)
-        formData_?.append('jobDescription', formData?.jobDescription)
+        formData_.append('jobTitle', formData.jobTitle);
+        formData_.append('jobDescription', formData.jobDescription);
 
         try {
-            const res = await axios.post('api/generate-interview-questions', formData_);
-            console.log(res.data);
+            const res = await axios.post('/api/generate-interview-questions', formData_);
+            console.log('API Response:', res.data);
 
-            if (res?.data?.status == 429) {
-                toast.warning(res?.data?.result)
-                console.log(res?.data?.result);
+            if (res?.data?.status === 429) {
+                toast.warning(res.data.result);
+                return;
+            }
+
+            if (!res.data?.questions) {
+                toast.error('No questions generated. Please try again.');
                 return;
             }
 
@@ -58,13 +66,17 @@ function CreateInterviewDialog() {
                 return;
             }
 
-            //Save to Database
+            // Save to Database
             const interviewId = await saveInterviewQuestion({
-                questions: res.data?.questions,
-                resumeUrl: res?.data.resumeUrl ?? '',
-                uid: userDetail._id as any, // Cast to any since Convex types are generated
-                jobTitle: formData?.jobTitle ?? '',
-                jobDescription: formData?.jobDescription ?? ''
+                questions: res.data.questions,
+                resumeUrl: res.data.resumeUrl ?? '',
+                uid: userDetail._id as any,
+                jobTitle: formData.jobTitle,
+                jobDescription: formData.jobDescription
+            }).catch(error => {
+                console.error('Error saving interview:', error);
+                toast.error('Could not save questions. Please try again.');
+                throw error; // Re-throw to be caught by outer catch
             });
 
                         // Normalize returned id (Convex can return different shapes).
@@ -102,10 +114,18 @@ function CreateInterviewDialog() {
                             toast.error('Failed to create interview. Please try again.');
                         }
 
-        } catch (e) {
-            console.log(e);
-        }
-        finally {
+        } catch (error) {
+            console.error('Error in interview creation:', error);
+            if (axios.isAxiosError(error)) {
+                if (error.response?.status === 429) {
+                    toast.error('Rate limit exceeded. Please try again later.');
+                } else {
+                    toast.error(error.response?.data?.message || 'Failed to generate interview questions');
+                }
+            } else {
+                toast.error('Could not save questions. Please try again.');
+            }
+        } finally {
             setLoading(false);
         }
     }
