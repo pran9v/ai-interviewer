@@ -104,9 +104,16 @@ function EditQuestionsPage() {
       });
       setOriginalQuestions(questions);
       toast.success('Questions saved successfully');
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error saving questions:', e);
-      setError('Could not save questions. Please try again.');
+      // Try to extract useful info from the error
+      const message = e?.message || (typeof e === 'string' ? e : JSON.stringify(e));
+      const details = e?.response?.data ?? e?.details ?? null;
+      const display = details ? `${message} - ${JSON.stringify(details)}` : message;
+      setError(`Could not save questions. ${display}`);
+      try {
+        toast.error(`Save failed: ${message}`);
+      } catch (_) {}
     }
     setSaving(false);
   };
