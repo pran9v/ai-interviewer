@@ -3,31 +3,41 @@ import { UserDetailContext } from '@/context/UserDetailContext';
 import { api } from '@/convex/_generated/api';
 import { useUser } from '@clerk/nextjs';
 import { useMutation } from 'convex/react'
-import React, { createContext, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { toast } from 'sonner';
 
 function Provider({ children }: any) {
-
-    const { user } = useUser();
+    const { user, isLoaded } = useUser();
     const CreateUser = useMutation(api.users.CreateNewUser);
     const [userDetail, setUserDetail] = useState<any>();
-    console.log('user')
+
     useEffect(() => {
-
-        user && CreateNewUser();
-    }, [user])
-
+        if (isLoaded && user) {
+            CreateNewUser().catch((error) => {
+                console.error('Error creating user:', error);
+                toast.error('Error initializing user profile');
+            });
+        }
+    }, [isLoaded, user])
 
     const CreateNewUser = async () => {
-
-        if (user) {
-            const result = await CreateUser({
-                email: user?.primaryEmailAddress?.emailAddress ?? '',
-                imageUrl: user?.imageUrl,
-                name: user?.fullName ?? ''
-            });
-            console.log(result)
-            setUserDetail(result);
+        try {
+            if (user) {
+                const result = await CreateUser({
+                    email: user.primaryEmailAddress?.emailAddress ?? '',
+                    imageUrl: user.imageUrl,
+                    name: user.fullName ?? ''
+                });
+                setUserDetail(result);
+            }
+        } catch (error) {
+            console.error('Error in CreateNewUser:', error);
+            throw error;
         }
+    }
+
+    if (!isLoaded) {
+        return <div>{children}</div>;
     }
 
     return (
@@ -38,7 +48,3 @@ function Provider({ children }: any) {
 }
 
 export default Provider
-
-export const useUserDetailContext = () => {
-    return createContext(UserDetailContext);
-}
