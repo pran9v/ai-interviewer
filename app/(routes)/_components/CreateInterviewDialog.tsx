@@ -64,9 +64,40 @@ function CreateInterviewDialog() {
                 jobDescription: formData?.jobDescription ?? ''
             });
 
-            // After creating the interview, send the user to the edit-questions screen
-            // so an admin/interviewer can review generated questions before starting.
-            router.push(`/interview/${interviewId}/edit-questions`);
+                        // Normalize returned id (Convex can return different shapes).
+                        // Common return shapes: string id, object with _id field, or the full record.
+                        let newId: string | undefined;
+                        try {
+                            if (!interviewId) throw new Error('No interview id returned');
+                            if (typeof interviewId === 'string') {
+                                newId = interviewId;
+                            } else if (typeof interviewId === 'object') {
+                                // inserted record may be returned or { _id: 'abc' }
+                                // handle nested structures conservatively
+                                // try common properties
+                                // @ts-ignore
+                                newId = interviewId._id || interviewId.id || interviewId.value || undefined;
+                                // If the result was the full inserted document, Convex may return the id as a string inside
+                                if (!newId) {
+                                    // try JSON stringification fallback
+                                    newId = (interviewId as any).toString?.();
+                                }
+                            }
+
+                            if (!newId) {
+                                console.error('Could not determine interview id from mutation result:', interviewId);
+                                toast.error('Failed to create interview (invalid id). Please try again.');
+                                return;
+                            }
+
+                            // After creating the interview, send the user to the edit-questions screen
+                            // so an admin/interviewer can review generated questions before starting.
+                            console.log('Interview created, navigating to edit-questions for id:', newId);
+                            router.push(`/interview/${newId}/edit-questions`);
+                        } catch (err) {
+                            console.error('Error handling interview id:', err);
+                            toast.error('Failed to create interview. Please try again.');
+                        }
 
         } catch (e) {
             console.log(e);
