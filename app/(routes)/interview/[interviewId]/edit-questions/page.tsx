@@ -7,8 +7,6 @@ import { useConvex } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel'
 import { useUser } from '@clerk/nextjs';
-import { useContext } from 'react';
-import { UserDetailContext } from '@/context/UserDetailContext';
 import { toast } from 'sonner';
 
 interface InterviewQuestion {
@@ -27,7 +25,6 @@ function EditQuestionsPage() {
   const [originalQuestions, setOriginalQuestions] = useState<InterviewQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [isInterviewer, setIsInterviewer] = useState(false);
   const [error, setError] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -56,16 +53,9 @@ function EditQuestionsPage() {
           return { question: '' };
         });
 
-        setQuestions(normalizedQuestions);
-        setOriginalQuestions(normalizedQuestions);
-        
-  // Check if user is interviewer or admin
-  const isAdmin = (user?.publicMetadata?.role === 'admin') || (user?.unsafeMetadata?.role === 'admin');
-  // userDetail contains the Convex user record created in Provider (with _id)
-  const { userDetail } = useContext(UserDetailContext) as any || {};
-  // Compare Convex user id (userDetail._id) to interview record's userId
-  const isOwner = !!(userDetail && result.userId && userDetail._id === result.userId);
-  setIsInterviewer(isAdmin || isOwner);
+    setQuestions(normalizedQuestions);
+    setOriginalQuestions(normalizedQuestions);
+    // Ownership removed: allow editing by any logged-in user. No owner check performed here.
       } catch (e) {
         console.error('Error loading interview:', e);
         setError('Could not load interview data. Please try again.');
@@ -122,7 +112,6 @@ function EditQuestionsPage() {
   };
 
   if (loading) return <div className="p-10 text-center"><div className="animate-pulse w-8 h-8 bg-gray-200 rounded-full mx-auto mb-4" /><div>Loading...</div></div>;
-  if (!isInterviewer) return <div className="p-8 text-center">Access denied: you are not the interviewer for this session.</div>;
 
   return (
     <div className="max-w-4xl mx-auto my-10 p-8 bg-white rounded-lg shadow-lg">
