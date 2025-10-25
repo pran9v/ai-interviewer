@@ -186,6 +186,13 @@ function StartInterview() {
 
     const startRecording = async () => {
         try {
+            // Set up silence detection callback
+            audioRecorder.setOnSilenceDetected(() => {
+                if (isRecording) {
+                    stopRecording();
+                }
+            });
+            
             await audioRecorder.startRecording();
             setIsRecording(true);
             toast.success('Recording started');

@@ -1,7 +1,15 @@
+import { SilenceDetector } from './silence-detector';
+
 export class AudioRecorder {
   private mediaRecorder: MediaRecorder | null = null;
   private audioChunks: Blob[] = [];
   private stream: MediaStream | null = null;
+  private silenceDetector: SilenceDetector | null = null;
+  private onSilenceDetected: (() => void) | null = null;
+
+  setOnSilenceDetected(callback: () => void) {
+    this.onSilenceDetected = callback;
+  }
 
   async startRecording(): Promise<void> {
     try {
@@ -26,6 +34,11 @@ export class AudioRecorder {
       };
       
       this.mediaRecorder.start(100); // Collect data every 100ms
+
+      // Initialize silence detector if callback is set
+      if (this.onSilenceDetected) {
+        this.silenceDetector = new SilenceDetector(this.stream, this.onSilenceDetected);
+      }
     } catch (error) {
       console.error('Error starting recording:', error);
       throw new Error('Failed to start recording. Please check microphone permissions.');
@@ -57,6 +70,10 @@ export class AudioRecorder {
     if (this.stream) {
       this.stream.getTracks().forEach(track => track.stop());
       this.stream = null;
+    }
+    if (this.silenceDetector) {
+      this.silenceDetector.cleanup();
+      this.silenceDetector = null;
     }
     this.mediaRecorder = null;
     this.audioChunks = [];
