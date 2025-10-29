@@ -6,8 +6,9 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 export async function POST(req: NextRequest) {
     try {
         const user = await currentUser();
-        const body = await req.json();
-        const jobTitle = (body.jobTitle as string | undefined) ?? (body?.title as string | undefined);
+    const body = await req.json();
+    const jobTitle = (body.jobTitle as string | undefined) ?? (body?.title as string | undefined);
+    const jobDescription = (body.jobDescription as string | undefined) ?? (body?.description as string | undefined) ?? null;
 
         console.log('generate-interview-questions called by', user?.primaryEmailAddress?.emailAddress, 'body:', body);
 
@@ -30,9 +31,10 @@ export async function POST(req: NextRequest) {
 
         // Call n8n Webhook with jobTitle only
         try {
-            const result = await axios.post('https://n8n.srv629238.hstgr.cloud/webhook/generate-interview-question', {
-                jobTitle: jobTitle
-            }, { timeout: 20000 });
+            const payload: any = { jobTitle };
+            if (jobDescription) payload.jobDescription = jobDescription;
+
+            const result = await axios.post('https://n8n.srv629238.hstgr.cloud/webhook/generate-interview-question', payload, { timeout: 20000 });
 
             console.log('n8n webhook response:', result.status, result.data);
 

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import axios from 'axios'
 import { Loader2Icon } from 'lucide-react'
 import { useMutation } from 'convex/react'
@@ -20,7 +21,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 function CreateInterviewDialog() {
 
-    const [formData, setFormData] = useState<any>({ jobTitle: '' });
+    const [formData, setFormData] = useState<any>({ jobTitle: '', jobDescription: '' });
     const [loading, setLoading] = useState(false);
     const { userDetail, setUserDetail } = useContext(UserDetailContext);
     const saveInterviewQuestion = useMutation(api.Interview.SaveInterviewQuestion)
@@ -40,7 +41,7 @@ function CreateInterviewDialog() {
 
         setLoading(true);
         try {
-            const res = await axios.post('/api/generate-interview-questions', { jobTitle: formData.jobTitle });
+            const res = await axios.post('/api/generate-interview-questions', { jobTitle: formData.jobTitle, jobDescription: formData.jobDescription });
             console.log('API Response:', res.data);
 
             if (res?.data?.status === 429) {
@@ -64,7 +65,7 @@ function CreateInterviewDialog() {
                 resumeUrl: undefined,
                 uid: userDetail._id as any,
                 jobTitle: formData.jobTitle,
-                jobDescription: undefined
+                jobDescription: formData.jobDescription || undefined
             });
 
                         // Normalize returned id (Convex can return different shapes).
