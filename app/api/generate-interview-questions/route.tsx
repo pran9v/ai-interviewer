@@ -18,8 +18,17 @@ export async function POST(req: NextRequest) {
         }
 
         const { has } = await auth();
-        const decision = await aj.protect(req, { userId: user?.primaryEmailAddress?.emailAddress ?? '', requested: 5 }); // Deduct 5 tokens from the bucket
-        console.log("Arcjet decision", decision);
+        // Arcjet can throw during protect (misconfigured key or network issues). Don't let the whole route crash.
+        let decision: any = null;
+        try {
+            decision = await aj.protect(req, { userId: user?.primaryEmailAddress?.emailAddress ?? '', requested: 5 }); // Deduct 5 tokens from the bucket
+            console.log("Arcjet decision", decision);
+        } catch (e: any) {
+            // Log and continue. We treat failure to consult Arcjet as a non-fatal condition so the generation still runs.
+            console.error('Arcjet protect failed:', e?.message || e);
+            decision = null;
+        }
+
         const isSubscribedUser = has({ plan: 'pro' })
         //@ts-ignore
         if (decision?.reason?.remaining == 0 && !isSubscribedUser) {
@@ -30,26 +39,42 @@ export async function POST(req: NextRequest) {
         }
 
         // Call n8n Webhook with jobTitle only
-        try {
-            const payload: any = { jobTitle };
-            if (jobDescription) payload.jobDescription = jobDescription;
+        // Call the external generation webhook with a small retry loop for transient network issues.
+        const payload: any = { jobTitle };
+        if (jobDescription) payload.jobDescription = jobDescription;
 
-            const result = await axios.post('https://n8n.srv629238.hstgr.cloud/webhook/generate-interview-question', payload, { timeout: 20000 });
+        const webhookUrl = 'https://n8n.srv629238.hstgr.cloud/webhook/generate-interview-question';
+        let lastError: any = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                const result = await axios.post(webhookUrl, payload, { timeout: 20000 });
+                console.log('n8n webhook response:', result.status, result.data);
 
-            console.log('n8n webhook response:', result.status, result.data);
+                const questions = result.data?.message?.content?.questions || result.data?.message?.content?.interview_questions || result.data?.questions;
+                if (!questions) {
+                    console.warn('Webhook did not return questions, payload:', result.data);
+                    return NextResponse.json({ error: 'No questions returned from generation service', details: result.data }, { status: 502 });
+                }
 
-            const questions = result.data?.message?.content?.questions || result.data?.message?.content?.interview_questions || result.data?.questions;
+                return NextResponse.json({ questions, status: 200 });
+            } catch (err: any) {
+                lastError = err;
+                console.error(`Attempt ${attempt + 1} - Error calling generation webhook:`, err?.response?.status, err?.response?.data || err?.message || err);
+                // small backoff before retrying
+                if (attempt === 0) await new Promise((r) => setTimeout(r, 500));
+            }
+        }
 
-            if (!questions) {
-                console.warn('Webhook did not return questions, payload:', result.data);
-                return NextResponse.json({ error: 'No questions returned from generation service', details: result.data }, { status: 502 });
+        // After retries, return a clear diagnostic payload.
+        if (lastError) {
+            // If axios couldn't reach the host, err.response will be undefined.
+            if (lastError.isAxiosError && !lastError.response) {
+                console.error('Generation webhook appears unreachable:', lastError.message);
+                return NextResponse.json({ error: 'Generation service unreachable', details: { message: lastError.message, webhookUrl } }, { status: 502 });
             }
 
-            return NextResponse.json({ questions, status: 200 });
-        } catch (err: any) {
-            console.error('Error calling generation webhook:', err?.response?.status, err?.response?.data || err.message);
-            const status = err?.response?.status || 502;
-            const details = err?.response?.data || { message: err?.message };
+            const status = lastError?.response?.status || 502;
+            const details = lastError?.response?.data || { message: lastError?.message };
             return NextResponse.json({ error: 'Generation service failed', details }, { status });
         }
 

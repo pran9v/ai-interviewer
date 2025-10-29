@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { FeedbackInfo } from '@/app/(routes)/dashboard/_components/FeedbackDialog';
 import { ConversationManager, ConversationMessage } from '@/app/utils/conversation-manager';
 import { AudioRecorder } from '@/app/utils/audio-recorder';
+import { InterviewerAvatar } from './_components/InterviewerAvatar';
 
 export type InterviewData = {
     jobTitle: string | null,
@@ -47,6 +48,7 @@ function StartInterview() {
     const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
     const [showTextInput, setShowTextInput] = useState(false);
     const [textResponse, setTextResponse] = useState('');
+        const [isSpeaking, setIsSpeaking] = useState(false);
     
     const updateFeedback = useMutation(api.Interview.UpdateFeedback);
     const startInterview = useMutation(api.Interview.StartInterview);
@@ -246,11 +248,20 @@ function StartInterview() {
         if (!textResponse.trim()) {
             toast.error('Please enter your response');
             return;
-        }
+                   <div className='min-h-screen flex flex-col items-center justify-center max-w-5xl mx-auto px-4 py-8'>
+                       <div className="flex flex-col items-center justify-center mb-8">
+                           <InterviewerAvatar isPlaying={isPlaying} isSpeaking={isSpeaking} />
+                           <h2 className="text-2xl font-bold mb-4">AI Interview Session</h2>
+                           {interviewData?.jobTitle && (
+                               <p className="text-gray-600">Position: {interviewData.jobTitle}</p>
+                           )}
+                       </div>
 
-        try {
+                       <div className='space-y-6 w-full max-w-2xl mx-auto bg-white/50 backdrop-blur-sm p-8 rounded-xl shadow-lg'>
             // Add user response to conversation
-            conversationManager?.addUserResponse(textResponse.trim());
+                               <div className="bg-blue-50 p-6 rounded-lg mb-6">
+                                   <h3 className='text-xl font-medium text-center text-blue-900'>{currentQuestion}</h3>
+                               </div>
             
             // Update conversation in database
             await updateConversation({
