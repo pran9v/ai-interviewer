@@ -72,17 +72,43 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // After retries, return a clear diagnostic payload.
+        // After retries, try the OpenAI fallback
         if (lastError) {
-            // If axios couldn't reach the host, err.response will be undefined.
-            if (lastError.isAxiosError && !lastError.response) {
-                console.error('Generation webhook appears unreachable:', lastError.message);
-                return NextResponse.json({ error: 'Generation service unreachable', details: { message: lastError.message, webhookUrl } }, { status: 502 });
-            }
+            console.log('n8n webhook failed, falling back to OpenAI generation');
+            
+            try {
+                // Call our fallback route
+                const fallbackResponse = await fetch(new URL('/api/generate-questions-fallback', req.url), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        programType,
+                        courseTitle,
+                        courseDescription 
+                    })
+                });
 
-            const status = lastError?.response?.status || 502;
-            const details = lastError?.response?.data || { message: lastError?.message };
-            return NextResponse.json({ error: 'Generation service failed', details }, { status });
+                if (!fallbackResponse.ok) {
+                    throw new Error(`Fallback failed: ${fallbackResponse.statusText}`);
+                }
+
+                const result = await fallbackResponse.json();
+                if (!result.questions) {
+                    throw new Error('No questions in fallback response');
+                }
+
+                return NextResponse.json(result);
+            } catch (fallbackError: any) {
+                // If both primary and fallback fail, return a detailed error
+                console.error('Both n8n and fallback generation failed:', fallbackError);
+                return NextResponse.json({ 
+                    error: 'Question generation failed',
+                    details: {
+                        primary: { message: lastError.message, webhookUrl },
+                        fallback: fallbackError.message
+                    }
+                }, { status: 502 });
+            }
         }
 
     } catch (error: any) {
