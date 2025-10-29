@@ -44,23 +44,62 @@ Remember to cover academic preparation, research interests, motivation, practica
 
 Return ONLY the JSON array of questions and evaluation guidelines.`;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.7,
-      max_tokens: 2000
-    });
+    // Try a list of models in order until one works
+    const modelCandidates = ['gpt-4', 'gpt-4o', 'gpt-3.5-turbo'];
+    let responseText: string | null = null;
+    let lastModelError: any = null;
 
-    const responseText = completion.choices?.[0]?.message?.content;
-    if (!responseText) throw new Error('Empty response from OpenAI');
+    for (const model of modelCandidates) {
+      try {
+        console.log('Attempting generation with model:', model);
+        const completion = await openai.chat.completions.create({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 2000
+        });
+
+        responseText = completion.choices?.[0]?.message?.content || null;
+        if (!responseText) {
+          lastModelError = new Error('Empty response from OpenAI');
+          continue; // try next model
+        }
+
+        // got response — break out of model loop
+        break;
+      } catch (mErr: any) {
+        lastModelError = mErr;
+        console.warn('Model', model, 'failed:', mErr?.message || mErr);
+        // If model not found or access denied, try next candidate
+        continue;
+      }
+    }
+
+    if (!responseText) {
+      const msg = lastModelError?.message || 'No models succeeded';
+      console.error('All model attempts failed:', msg);
+      throw new Error(msg);
+    }
 
     try {
-      const parsed = JSON.parse(responseText.trim());
-      const questions = Array.isArray(parsed) ? parsed : parsed.questions;
+      // First try strict JSON
+      let parsed: any;
+      try {
+        parsed = JSON.parse(responseText.trim());
+      } catch (pe) {
+        // If direct parse fails, try to extract the first JSON array in the text
+        const arrayMatch = responseText.match(/\[\s*\{[\s\S]*\}\s*\]/m);
+        if (arrayMatch) {
+          parsed = JSON.parse(arrayMatch[0]);
+        } else {
+          throw pe;
+        }
+      }
 
+      const questions = Array.isArray(parsed) ? parsed : parsed.questions;
       if (!Array.isArray(questions)) throw new Error('Response does not contain a questions array');
 
       const validatedQuestions = questions.filter((q: any) => q && typeof q.question === 'string' && typeof q.answer === 'string');
@@ -69,8 +108,8 @@ Return ONLY the JSON array of questions and evaluation guidelines.`;
       console.log('Successfully generated questions:', validatedQuestions.length);
       return NextResponse.json({ questions: validatedQuestions, status: 200 });
     } catch (e: any) {
-      console.error('Failed to parse OpenAI response:', e?.message || e);
-      return NextResponse.json({ error: 'Failed to parse generated questions', details: e?.message || e }, { status: 502 });
+      console.error('Failed to parse OpenAI response:', e?.message || e, '\nResponseText:', responseText);
+      return NextResponse.json({ error: 'Failed to parse generated questions', details: e?.message || e, responseText: responseText.slice(0, 2000) }, { status: 502 });
     }
   } catch (error: any) {
     console.error('Error generating questions:', error?.message || error);
