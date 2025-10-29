@@ -39,16 +39,19 @@ export async function POST(req: NextRequest) {
             })
         }
 
-        // Prepare the admissions interview prompt for n8n
+        // Prepare payload for n8n webhook
         const prompt = `You are a part of graduation admissions committee at a leading university in the US. The university is looking for prospective international students to join your courses. So they have prepared a list of students who have applied to the university. You are tasked to have a f2f interview with each of the students and then come up with your recommendations. This is for the ${programType} and the course title is ${courseTitle}. Which questions will you ask the students during the interview?`;
 
-        // Call the external generation webhook with the new prompt
-        const payload: any = { 
-            prompt,
-            programType,
-            courseTitle,
-            courseDescription
+        // Format payload to match what n8n expects (maintain backward compatibility)
+        const payload: any = {
+            title: `${programType} - ${courseTitle}`,  // Keep old format for compatibility
+            description: courseDescription || '',
+            message: {
+                role: "user",
+                content: prompt
+            }
         };
+        console.log('Sending payload to n8n:', payload);
 
         const webhookUrl = 'https://n8n.srv629238.hstgr.cloud/webhook/generate-interview-question';
         let lastError: any = null;
@@ -57,9 +60,14 @@ export async function POST(req: NextRequest) {
                 const result = await axios.post(webhookUrl, payload, { timeout: 20000 });
                 console.log('n8n webhook response:', result.status, result.data);
 
-                const questions = result.data?.message?.content?.questions || result.data?.message?.content?.interview_questions || result.data?.questions;
+                console.log('Raw n8n response:', JSON.stringify(result.data, null, 2));
+                // Try multiple paths where questions might be in the response
+                const questions = result.data?.message?.content?.questions ||  // New format
+                                result.data?.message?.content?.interview_questions ||  // Alternative new format
+                                result.data?.questions ||  // Old direct format
+                                (result.data?.message?.content && JSON.parse(result.data.message.content)?.questions);  // Parse if string
                 if (!questions) {
-                    console.warn('Webhook did not return questions, payload:', result.data);
+                    console.warn('Webhook response contained no questions. Response:', JSON.stringify(result.data, null, 2));
                     return NextResponse.json({ error: 'No questions returned from generation service', details: result.data }, { status: 502 });
                 }
 
@@ -74,9 +82,10 @@ export async function POST(req: NextRequest) {
 
         // After retries, try the OpenAI fallback
         if (lastError) {
-            console.log('n8n webhook failed, falling back to OpenAI generation');
+            console.log('n8n webhook failed after retries, falling back to OpenAI generation');
             
             try {
+                console.log('Calling OpenAI fallback with:', { programType, courseTitle, courseDescription });
                 // Call our fallback route
                 const fallbackResponse = await fetch(new URL('/api/generate-questions-fallback', req.url), {
                     method: 'POST',

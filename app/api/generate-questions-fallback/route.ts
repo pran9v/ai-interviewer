@@ -66,8 +66,10 @@ Return ONLY the JSON array of questions and evaluation guidelines.`;
         try {
             // Try to parse the response as JSON
             const questions = JSON.parse(responseText.trim());
+            console.log('Successfully parsed OpenAI response:', questions);
             return NextResponse.json({ questions, source: 'openai-fallback' });
         } catch (e) {
+            console.log('Failed to parse response directly, trying to extract array portion. Response:', responseText);
             // If parsing fails, try to extract array portion
             const match = responseText.match(/\[\s*{\s*"question"/);
             if (match) {
@@ -76,15 +78,18 @@ Return ONLY the JSON array of questions and evaluation guidelines.`;
                 const jsonStr = responseText.slice(startIdx, endIdx);
                 try {
                     const questions = JSON.parse(jsonStr);
+                    console.log('Successfully extracted and parsed questions array:', questions);
                     return NextResponse.json({ questions, source: 'openai-fallback' });
                 } catch (e) {
+                    console.error('Failed to parse extracted JSON:', jsonStr);
                     throw new Error('Could not parse questions from response');
                 }
             }
+            console.error('Response did not contain a questions array:', responseText);
             throw new Error('Response was not in the expected format');
         }
     } catch (error: any) {
-        console.error('Error generating questions:', error);
+        console.error('Error in fallback generation:', error?.message || error, '\nStack:', error?.stack);
         return NextResponse.json({ 
             error: 'Failed to generate questions',
             details: error?.message || 'Unknown error'
