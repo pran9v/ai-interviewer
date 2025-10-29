@@ -14,6 +14,7 @@ import type {
   FunctionReference,
 } from "convex/server";
 import type * as Interview from "../Interview.js";
+import type * as QuestionBank from "../QuestionBank.js";
 import type * as users from "../users.js";
 
 /**
@@ -26,6 +27,7 @@ import type * as users from "../users.js";
  */
 declare const fullApi: ApiFromModules<{
   Interview: typeof Interview;
+  QuestionBank: typeof QuestionBank;
   users: typeof users;
 }>;
 export declare const api: FilterApi<

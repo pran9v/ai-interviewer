@@ -5,9 +5,16 @@ import { api } from '@/convex/_generated/api';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
+import { Id } from '@/convex/_generated/dataModel';
+
 type Question = {
+    _id: Id<'QuestionBankTable'>;
     question: string;
     answer: string;
+    programType?: string;
+    courseTitle?: string;
+    createdAt: number;
+    updatedAt: number;
 };
 
 export default function QuestionBank() {
@@ -16,15 +23,13 @@ export default function QuestionBank() {
     const [editedQuestion, setEditedQuestion] = useState<Question | null>(null);
 
     // Convex query to get saved questions
-    const savedQuestions = useQuery(api.Interview.GetSavedQuestions);
-    const saveQuestion = useMutation(api.Interview.SaveQuestionToBank);
-    const updateQuestion = useMutation(api.Interview.UpdateQuestionInBank);
-    const deleteQuestion = useMutation(api.Interview.DeleteQuestionFromBank);
+    const savedQuestions = useQuery(api.QuestionBank.GetSavedQuestions) || [];
+    const saveQuestion = useMutation(api.QuestionBank.SaveQuestionToBank);
+    const updateQuestion = useMutation(api.QuestionBank.UpdateQuestionInBank);
+    const deleteQuestion = useMutation(api.QuestionBank.DeleteQuestionFromBank);
 
     useEffect(() => {
-        if (savedQuestions) {
-            setQuestions(savedQuestions);
-        }
+        setQuestions(savedQuestions);
     }, [savedQuestions]);
 
     const handleEdit = (index: number) => {
