@@ -1,20 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from 'openai';
 import { auth, currentUser } from "@clerk/nextjs/server";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-const systemPrompt = `You are an expert university admissions officer tasked with generating interview questions. Generate 8-12 relevant questions that will help assess a candidate's fit, motivation, and preparation for their chosen program.
-
-The questions should:
-1. Assess academic background and preparation
-2. Evaluate research interests and goals
-3. Understand motivation for the specific program
-4. Gauge practical experience and skills
-5. Test critical thinking and problem-solving
-6. Explore cultural fit and adaptability
-
-Format your response EXACTLY as a JSON array of objects with 'question' and 'answer' fields. The 'answer' field should contain guidelines for evaluating responses.`;
+import OpenAI from "openai";
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,9 +18,18 @@ export async function POST(req: NextRequest) {
     const { has } = await auth();
     const isSubscribedUser = has({ plan: 'pro' });
 
-    const provider = (process.env.GENERATIVE_PROVIDER || 'gemini').toLowerCase();
+    const systemPrompt = `You are an expert university admissions officer tasked with generating interview questions. Generate 8-12 relevant questions that will help assess a candidate's fit, motivation, and preparation for their chosen program.
 
-    // Build the user prompt
+The questions should:
+1. Assess academic background and preparation
+2. Evaluate research interests and goals
+3. Understand motivation for the specific program
+4. Gauge practical experience and skills
+5. Test critical thinking and problem-solving
+6. Explore cultural fit and adaptability
+
+Format your response EXACTLY as a JSON array of objects with 'question' and 'answer' fields. The 'answer' field should contain guidelines for evaluating responses.`;
+
     const userPrompt = `Generate interview questions for a ${programType} program in ${courseTitle}.${
       courseDescription ? ` The program focuses on: ${courseDescription}` : ''
     }
@@ -43,161 +38,199 @@ Remember to cover academic preparation, research interests, motivation, practica
 
 Return ONLY the JSON array of questions and evaluation guidelines.`;
 
+    const geminiKey = process.env.GEMINI_API_KEY;
+    if (!geminiKey) {
+      return NextResponse.json({ error: 'GEMINI_API_KEY not configured', details: 'Please add GEMINI_API_KEY to environment variables' }, { status: 500 });
+    }
+
+    // Prefer Gemini 1.5 models via generateContent; then fall back to older endpoints
+    const endpoints = [
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${geminiKey}`,
+      // Legacy PaLM endpoints (kept as last resort if project still allows)
+      `https://generativelanguage.googleapis.com/v1beta2/models/chat-bison-001:generateMessage?key=${geminiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText?key=${geminiKey}`
+    ];
+
     let responseText: string | null = null;
-    let lastProviderError: any = null;
+    let lastError: any = null;
 
-    // If Gemini is the provider (default), call Google Generative API using GEMINI_API_KEY
-    if (provider === 'gemini') {
-      const geminiKey = process.env.GEMINI_API_KEY;
-      if (!geminiKey) {
-        return NextResponse.json({ error: 'GEMINI_API_KEY not configured', details: 'Please add GEMINI_API_KEY to environment variables' }, { status: 500 });
-      }
-
-      // Try chat-bison first, then text-bison
-      const endpoints = [
-        `https://generativelanguage.googleapis.com/v1beta2/models/chat-bison-001:generateMessage?key=${geminiKey}`,
-        `https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText?key=${geminiKey}`
-      ];
-
-      for (const url of endpoints) {
-        try {
-          console.log('Calling Gemini endpoint:', url);
-          const body = url.includes(':generateMessage') ? {
+    for (const url of endpoints) {
+      try {
+        console.log('Calling Gemini endpoint:', url);
+        // Build request body depending on endpoint type
+        let body: any;
+        if (url.includes(':generateContent')) {
+          // Gemini 1.x API
+          body = {
+            contents: [
+              {
+                role: 'user',
+                parts: [
+                  { text: `${systemPrompt}\n\n${userPrompt}` }
+                ]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 1024
+            }
+          };
+        } else if (url.includes(':generateMessage')) {
+          // Legacy chat-bison
+          body = {
             messages: [
               { author: 'system', content: systemPrompt },
               { author: 'user', content: userPrompt }
             ],
             temperature: 0.7,
             maxOutputTokens: 1024
-          } : {
-            prompt: userPrompt,
+          };
+        } else {
+          // Legacy text-bison
+          body = {
+            prompt: `${systemPrompt}\n\n${userPrompt}`,
             temperature: 0.7,
             maxOutputTokens: 1024
           };
+        }
 
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-          });
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
 
-          if (!res.ok) {
-            const errText = await res.text();
-            lastProviderError = new Error(`Gemini ${res.status}: ${errText}`);
-            console.warn('Gemini endpoint failed:', res.status, errText);
-            continue;
-          }
+        if (!res.ok) {
+          const errText = await res.text();
+          lastError = new Error(`Gemini ${res.status}: ${errText}`);
+          console.warn('Gemini endpoint failed:', res.status, errText);
+          continue;
+        }
 
-          const json = await res.json();
-          // Extract text from multiple possible shapes
-          const textCandidates: string[] = [];
-          if (Array.isArray(json?.candidates) && json.candidates[0]) {
-            const cand = json.candidates[0];
-            if (typeof cand.output === 'string') textCandidates.push(cand.output);
-            if (typeof cand.text === 'string') textCandidates.push(cand.text);
-            if (Array.isArray(cand?.content)) {
-              for (const part of cand.content) {
-                if (typeof part?.text === 'string') textCandidates.push(part.text);
-                if (typeof part?.text === 'object' && part?.text?.toString) textCandidates.push(part.text.toString());
-              }
+        const json = await res.json();
+        // Extract text across Gemini 1.x and legacy shapes
+        const textCandidates: string[] = [];
+
+        // Gemini 1.x: candidates[0].content.parts[].text
+        if (Array.isArray(json?.candidates) && json.candidates[0]) {
+          const cand = json.candidates[0];
+          if (cand?.content?.parts && Array.isArray(cand.content.parts)) {
+            for (const part of cand.content.parts) {
+              if (typeof part?.text === 'string') textCandidates.push(part.text);
             }
           }
-          // Older/newer chat responses
-          if (json?.message?.content) {
-            const content = json.message.content;
-            if (Array.isArray(content)) {
-              for (const c of content) if (c?.text) textCandidates.push(c.text);
-            } else if (typeof content === 'string') textCandidates.push(content);
+          // Some responses put text directly at candidates[0].content[0].text
+          if (Array.isArray(cand?.content)) {
+            for (const part of cand.content) {
+              if (typeof part?.text === 'string') textCandidates.push(part.text);
+            }
           }
-          if (json?.candidates?.[0]?.content?.[0]?.text) textCandidates.push(json.candidates[0].content[0].text);
-          if (json?.output?.[0]?.content?.[0]?.text) textCandidates.push(json.output[0].content[0].text);
-
-          // Fallback: if body contains a simple 'candidates[0].output' or 'candidates[0].content'
-          const extracted = textCandidates.find(t => typeof t === 'string' && t.trim().length > 0);
-          if (extracted) {
-            responseText = extracted;
-            break;
-          }
-
-          // As a last resort, stringify the whole response and try to find an array
-          const asString = JSON.stringify(json);
-          const match = asString.match(/\[\s*\{\s*"question"/);
-          if (match) {
-            // extract array substring
-            const start = asString.indexOf('[');
-            const end = asString.lastIndexOf(']') + 1;
-            responseText = asString.slice(start, end);
-            break;
-          }
-        } catch (gErr: any) {
-          lastProviderError = gErr;
-          console.warn('Gemini call error:', gErr?.message || gErr);
-          continue;
+          if (typeof cand.output === 'string') textCandidates.push(cand.output);
+          if (typeof cand.text === 'string') textCandidates.push(cand.text);
         }
-      }
 
-      if (!responseText && lastProviderError) {
-        console.error('Gemini attempts failed:', lastProviderError?.message || lastProviderError);
-        // fall through to trying OpenAI if configured
-      }
-    }
-
-    // If responseText still empty and provider isn't strictly gemini-only, try OpenAI as a fallback
-    if (!responseText && provider !== 'openai') {
-      // If provider was explicitly set to gemini, still allow OpenAI fallback only if OPENAI_API_KEY exists
-      if (!process.env.OPENAI_API_KEY) {
-        // If we don't have any provider available, return an error
-        if (!responseText) {
-          return NextResponse.json({ error: 'No generation provider available', details: 'Gemini failed and OPENAI_API_KEY not set' }, { status: 502 });
+        // Legacy chat: json.message.content[*].text or string
+        if (json?.message?.content) {
+          const content = json.message.content;
+          if (Array.isArray(content)) {
+            for (const c of content) if (c?.text) textCandidates.push(c.text);
+          } else if (typeof content === 'string') textCandidates.push(content);
         }
-      }
-    }
+        if (json?.output?.[0]?.content?.[0]?.text) textCandidates.push(json.output[0].content[0].text);
 
-    // If provider == 'openai' or we're falling back to OpenAI, call OpenAI
-    if (!responseText && (provider === 'openai' || process.env.OPENAI_API_KEY)) {
-      if (!process.env.OPENAI_API_KEY) {
-        return NextResponse.json({ error: 'OpenAI API key not configured', details: 'Please add OPENAI_API_KEY to environment variables' }, { status: 500 });
-      }
-
-      // Try a list of models in order until one works
-      const modelCandidates = [process.env.OPENAI_MODEL || 'gpt-4', 'gpt-4o', 'gpt-3.5-turbo'];
-      let lastModelError: any = null;
-
-      for (const model of modelCandidates) {
-        try {
-          console.log('Attempting generation with OpenAI model:', model);
-          const completion = await openai.chat.completions.create({
-            model,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userPrompt }
-            ],
-            temperature: 0.7,
-            max_tokens: 2000
-          });
-
-          responseText = completion.choices?.[0]?.message?.content || null;
-          if (!responseText) {
-            lastModelError = new Error('Empty response from OpenAI');
-            continue; // try next model
-          }
-
+        // Choose first non-empty string
+        const extracted = textCandidates.find(t => typeof t === 'string' && t.trim().length > 0);
+        if (extracted) {
+          responseText = extracted;
           break;
-        } catch (mErr: any) {
-          lastModelError = mErr;
-          console.warn('OpenAI model', model, 'failed:', mErr?.message || mErr);
-          continue;
         }
-      }
 
-      if (!responseText && lastModelError) {
-        console.error('All OpenAI model attempts failed:', lastModelError?.message || lastModelError);
-        throw lastModelError;
+        // As a last resort, stringify the whole response and try to find an array
+        const asString = JSON.stringify(json);
+        const match = asString.match(/\[\s*\{[\s\S]*\}\s*\]/m);
+        if (match) {
+          responseText = match[0];
+          break;
+        }
+      } catch (gErr: any) {
+        lastError = gErr;
+        console.warn('Gemini call error:', gErr?.message || gErr);
+        continue;
       }
     }
 
     if (!responseText) {
-      throw new Error('No response generated by provider');
+      console.error('Gemini generation failed:', lastError?.message || 'Unknown error');
+
+      // Fallback to OpenAI if configured
+      const openaiApiKey = process.env.OPENAI_API_KEY;
+      if (openaiApiKey) {
+        try {
+          const openai = new OpenAI({ apiKey: openaiApiKey });
+
+          // Exponential backoff retries for rate limits
+          const maxAttempts = 3;
+          let attempt = 0;
+          let openAiText: string | null = null;
+          let lastOpenAiError: any = null;
+
+          while (attempt < maxAttempts && !openAiText) {
+            try {
+              const completion = await openai.chat.completions.create({
+                model: 'gpt-4',
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: userPrompt }
+                ],
+                temperature: 0.7,
+                max_tokens: 2000
+              });
+
+              openAiText = completion.choices?.[0]?.message?.content || null;
+              if (openAiText) {
+                responseText = openAiText;
+                break;
+              }
+            } catch (oe: any) {
+              lastOpenAiError = oe;
+              const status = oe?.status || oe?.response?.status;
+              const isRateLimited = status === 429 || /rate limit/i.test(oe?.message || '') || /You exceeded your current quota/i.test(oe?.message || '');
+              if (isRateLimited && attempt < maxAttempts - 1) {
+                const delayMs = 500 * Math.pow(2, attempt); // 500ms, 1000ms, 2000ms
+                await new Promise(r => setTimeout(r, delayMs));
+                attempt += 1;
+                continue;
+              }
+              // Non-retryable or last attempt
+              break;
+            }
+          }
+
+          if (!responseText) {
+            const message = lastOpenAiError?.message || 'Unknown OpenAI error';
+            const status = lastOpenAiError?.status || lastOpenAiError?.response?.status;
+            const isRateLimited = status === 429 || /You exceeded your current quota/i.test(message);
+            return NextResponse.json({
+              error: 'Failed to generate questions',
+              details: message,
+              provider: 'openai'
+            }, { status: isRateLimited ? 429 : 502 });
+          }
+        } catch (fallbackErr: any) {
+          return NextResponse.json({ 
+            error: 'Failed to generate questions', 
+            details: fallbackErr?.message || 'Unknown error',
+            provider: 'openai'
+          }, { status: 502 });
+        }
+      } else {
+        return NextResponse.json({ 
+          error: 'Failed to generate questions', 
+          details: lastError?.message || 'Unknown error',
+          provider: 'gemini'
+        }, { status: 502 });
+      }
     }
 
     try {
@@ -225,7 +258,12 @@ Return ONLY the JSON array of questions and evaluation guidelines.`;
       return NextResponse.json({ questions: validatedQuestions, status: 200 });
     } catch (e: any) {
       console.error('Failed to parse response:', e?.message || e, '\nResponseText:', responseText);
-      return NextResponse.json({ error: 'Failed to parse generated questions', details: e?.message || e, responseText: responseText ? responseText.slice(0, 2000) : undefined }, { status: 502 });
+      return NextResponse.json({ 
+        error: 'Failed to parse generated questions', 
+        details: e?.message || e, 
+        responseText: responseText ? responseText.slice(0, 2000) : undefined,
+        provider: 'gemini'
+      }, { status: 502 });
     }
   } catch (error: any) {
     console.error('Error generating questions:', error?.message || error);
