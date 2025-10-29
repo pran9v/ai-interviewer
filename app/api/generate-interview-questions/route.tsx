@@ -18,6 +18,13 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Missing course title or program type' }, { status: 400 });
         }
 
+        console.log('Starting question generation for:', {
+            programType,
+            courseTitle,
+            courseDescription,
+            user: user?.primaryEmailAddress?.emailAddress
+        });
+
         const { has } = await auth();
         // Arcjet can throw during protect (misconfigured key or network issues). Don't let the whole route crash.
         let decision: any = null;
@@ -40,16 +47,29 @@ export async function POST(req: NextRequest) {
         }
 
         // Prepare payload for n8n webhook
-        const prompt = `You are a part of graduation admissions committee at a leading university in the US. The university is looking for prospective international students to join your courses. So they have prepared a list of students who have applied to the university. You are tasked to have a f2f interview with each of the students and then come up with your recommendations. This is for the ${programType} and the course title is ${courseTitle}. Which questions will you ask the students during the interview?`;
+        const prompt = `You are a part of graduation admissions committee at a leading university in the US. The university is looking for prospective international students to join your courses. You are tasked to have a f2f interview with each of the students and then come up with your recommendations.
 
-        // Format payload to match what n8n expects (maintain backward compatibility)
-        const payload: any = {
-            title: `${programType} - ${courseTitle}`,  // Keep old format for compatibility
-            description: courseDescription || '',
+Please generate a set of interview questions for a ${programType} program in ${courseTitle}${courseDescription ? `. The program focuses on: ${courseDescription}` : ''}.
+
+The questions should:
+1. Assess academic background and preparation
+2. Evaluate research interests and goals
+3. Understand motivation for the specific program
+4. Gauge practical experience and skills
+5. Test critical thinking and problem-solving
+6. Explore cultural fit and adaptability
+
+Format your response as a JSON array of question objects with 'question' and 'answer' fields. The 'answer' field should contain guidelines for evaluating responses.`;
+
+        // Format payload to match what n8n expects
+        const payload = {
             message: {
                 role: "user",
                 content: prompt
-            }
+            },
+            model: "gpt-4",  // Request GPT-4 from n8n for better results
+            temperature: 0.7,
+            format: "json"  // Request JSON format explicitly
         };
         console.log('Sending payload to n8n:', payload);
 
@@ -57,18 +77,46 @@ export async function POST(req: NextRequest) {
         let lastError: any = null;
         for (let attempt = 0; attempt < 2; attempt++) {
             try {
-                const result = await axios.post(webhookUrl, payload, { timeout: 20000 });
+                const result = await axios.post(webhookUrl, payload, { timeout: 30000 }); // Increase timeout
                 console.log('n8n webhook response:', result.status, result.data);
+                
+                if (!result.data) {
+                    throw new Error('Empty response from n8n webhook');
+                }
 
                 console.log('Raw n8n response:', JSON.stringify(result.data, null, 2));
+                
+                // Try to parse the response content if it's a string
+                let parsedContent;
+                if (typeof result.data?.message?.content === 'string') {
+                    try {
+                        parsedContent = JSON.parse(result.data.message.content);
+                    } catch (e) {
+                        console.warn('Failed to parse string content:', e);
+                    }
+                }
+                
                 // Try multiple paths where questions might be in the response
-                const questions = result.data?.message?.content?.questions ||  // New format
-                                result.data?.message?.content?.interview_questions ||  // Alternative new format
-                                result.data?.questions ||  // Old direct format
-                                (result.data?.message?.content && JSON.parse(result.data.message.content)?.questions);  // Parse if string
-                if (!questions) {
-                    console.warn('Webhook response contained no questions. Response:', JSON.stringify(result.data, null, 2));
-                    return NextResponse.json({ error: 'No questions returned from generation service', details: result.data }, { status: 502 });
+                const questions = result.data?.message?.content?.questions || // Object path
+                                result.data?.message?.content?.interview_questions || // Alternative path
+                                result.data?.questions || // Direct path
+                                parsedContent?.questions || // Parsed content
+                                (Array.isArray(parsedContent) ? parsedContent : null); // Direct array
+                
+                if (!questions || !Array.isArray(questions)) {
+                    console.warn('Webhook response contained no valid questions array. Response:', JSON.stringify(result.data, null, 2));
+                    throw new Error('No valid questions array in response');
+                }
+                
+                // Validate question format
+                const validatedQuestions = questions.filter(q => 
+                    typeof q === 'object' && q !== null && 
+                    typeof q.question === 'string' && 
+                    typeof q.answer === 'string'
+                );
+                
+                if (validatedQuestions.length === 0) {
+                    throw new Error('No properly formatted questions in response');
                 }
 
                 return NextResponse.json({ questions, status: 200 });
