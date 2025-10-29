@@ -245,24 +245,15 @@ function StartInterview() {
     };
 
     const submitTextResponse = async () => {
-        if (!textResponse.trim()) {
-            toast.error('Please enter your response');
-            return;
-                   <div className='min-h-screen flex flex-col items-center justify-center max-w-5xl mx-auto px-4 py-8'>
-                       <div className="flex flex-col items-center justify-center mb-8">
-                           <InterviewerAvatar isPlaying={isPlaying} isSpeaking={isSpeaking} />
-                           <h2 className="text-2xl font-bold mb-4">AI Interview Session</h2>
-                           {interviewData?.jobTitle && (
-                               <p className="text-gray-600">Position: {interviewData.jobTitle}</p>
-                           )}
-                       </div>
+        try {
+            if (!textResponse.trim()) {
+                toast.error('Please enter your response');
+                return;
+            }
 
-                       <div className='space-y-6 w-full max-w-2xl mx-auto bg-white/50 backdrop-blur-sm p-8 rounded-xl shadow-lg'>
             // Add user response to conversation
-                               <div className="bg-blue-50 p-6 rounded-lg mb-6">
-                                   <h3 className='text-xl font-medium text-center text-blue-900'>{currentQuestion}</h3>
-                               </div>
-            
+            conversationManager?.addUserResponse(textResponse.trim());
+
             // Update conversation in database
             await updateConversation({
                 recordId: interviewData!._id,
