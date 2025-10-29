@@ -6,15 +6,16 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 export async function POST(req: NextRequest) {
     try {
         const user = await currentUser();
-    const body = await req.json();
-    const jobTitle = (body.jobTitle as string | undefined) ?? (body?.title as string | undefined);
-    const jobDescription = (body.jobDescription as string | undefined) ?? (body?.description as string | undefined) ?? null;
+        const body = await req.json();
+        const programType = body.programType as string;
+        const courseTitle = body.courseTitle as string;
+        const courseDescription = body.courseDescription as string | undefined;
 
         console.log('generate-interview-questions called by', user?.primaryEmailAddress?.emailAddress, 'body:', body);
 
-        if (!jobTitle || !jobTitle.trim()) {
-            console.warn('generate-interview-questions: missing jobTitle');
-            return NextResponse.json({ error: 'Missing jobTitle' }, { status: 400 });
+        if (!courseTitle?.trim() || !programType?.trim()) {
+            console.warn('generate-interview-questions: missing required fields');
+            return NextResponse.json({ error: 'Missing course title or program type' }, { status: 400 });
         }
 
         const { has } = await auth();
@@ -38,10 +39,16 @@ export async function POST(req: NextRequest) {
             })
         }
 
-        // Call n8n Webhook with jobTitle only
-        // Call the external generation webhook with a small retry loop for transient network issues.
-        const payload: any = { jobTitle };
-        if (jobDescription) payload.jobDescription = jobDescription;
+        // Prepare the admissions interview prompt for n8n
+        const prompt = `You are a part of graduation admissions committee at a leading university in the US. The university is looking for prospective international students to join your courses. So they have prepared a list of students who have applied to the university. You are tasked to have a f2f interview with each of the students and then come up with your recommendations. This is for the ${programType} and the course title is ${courseTitle}. Which questions will you ask the students during the interview?`;
+
+        // Call the external generation webhook with the new prompt
+        const payload: any = { 
+            prompt,
+            programType,
+            courseTitle,
+            courseDescription
+        };
 
         const webhookUrl = 'https://n8n.srv629238.hstgr.cloud/webhook/generate-interview-question';
         let lastError: any = null;

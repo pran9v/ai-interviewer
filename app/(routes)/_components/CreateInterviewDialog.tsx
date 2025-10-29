@@ -21,11 +21,24 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 function CreateInterviewDialog() {
 
-    const [formData, setFormData] = useState<any>({ jobTitle: '', jobDescription: '' });
+    const programTypes = [
+        'Undergraduate',
+        'Graduate',
+        'Post doctorate',
+        'Masters',
+        'Diploma'
+    ];
+
+    const [formData, setFormData] = useState<any>({ 
+        programType: programTypes[0], 
+        courseTitle: '',
+        courseDescription: ''
+    });
     const [loading, setLoading] = useState(false);
     const { userDetail, setUserDetail } = useContext(UserDetailContext);
     const saveInterviewQuestion = useMutation(api.Interview.SaveInterviewQuestion)
     const router = useRouter();
+    
     const onHandleInputChange = (field: string, value: string) => {
         setFormData((prev: any) => ({
             ...prev,
@@ -34,14 +47,18 @@ function CreateInterviewDialog() {
     }
 
     const onSubmit = async () => {
-        if (!formData.jobTitle || !formData.jobTitle.trim()) {
-            toast.error('Please enter a job title');
+        if (!formData.courseTitle || !formData.courseTitle.trim()) {
+            toast.error('Please enter a course title');
             return;
         }
 
         setLoading(true);
         try {
-            const res = await axios.post('/api/generate-interview-questions', { jobTitle: formData.jobTitle, jobDescription: formData.jobDescription });
+            const res = await axios.post('/api/generate-interview-questions', { 
+                programType: formData.programType,
+                courseTitle: formData.courseTitle,
+                courseDescription: formData.courseDescription
+            });
             console.log('API Response:', res.data);
 
             if (res?.data?.status === 429) {
@@ -64,8 +81,8 @@ function CreateInterviewDialog() {
                 questions: res.data.questions,
                 resumeUrl: undefined,
                 uid: userDetail._id as any,
-                jobTitle: formData.jobTitle,
-                jobDescription: formData.jobDescription || undefined
+                jobTitle: `${formData.programType} - ${formData.courseTitle}`, // Store combined for display
+                jobDescription: formData.courseDescription || undefined
             });
 
                         // Normalize returned id (Convex can return different shapes).
@@ -131,20 +148,33 @@ function CreateInterviewDialog() {
                     <DialogDescription>
                         <div className="w-full mt-4 space-y-4">
                             <div>
-                                <label className="block mb-2 text-sm font-medium text-gray-700">Job Title</label>
+                                <label className="block mb-2 text-sm font-medium text-gray-700">Program Type</label>
+                                <select
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    value={formData.programType}
+                                    onChange={(e) => onHandleInputChange('programType', e.target.value)}
+                                >
+                                    {programTypes.map((type) => (
+                                        <option key={type} value={type}>{type}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block mb-2 text-sm font-medium text-gray-700">Course Title</label>
                                 <Input
-                                    placeholder="Enter job title (e.g. Software Engineer)"
-                                    value={formData.jobTitle}
-                                    onChange={(e) => onHandleInputChange('jobTitle', e.target.value)}
+                                    placeholder="Enter course title (e.g. Computer Science)"
+                                    value={formData.courseTitle}
+                                    onChange={(e) => onHandleInputChange('courseTitle', e.target.value)}
                                 />
                             </div>
 
                             <div>
-                                <label className="block mb-2 text-sm font-medium text-gray-700">Job Description</label>
+                                <label className="block mb-2 text-sm font-medium text-gray-700">Course Description</label>
                                 <Textarea
-                                    placeholder="Enter or paste the job description"
-                                    value={formData.jobDescription}
-                                    onChange={(e) => onHandleInputChange('jobDescription', e.target.value)}
+                                    placeholder="Enter or paste the course description"
+                                    value={formData.courseDescription}
+                                    onChange={(e) => onHandleInputChange('courseDescription', e.target.value)}
                                     className="h-[160px]"
                                 />
                             </div>
