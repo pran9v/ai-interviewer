@@ -8,6 +8,15 @@ export default defineSchema({
         email: v.string(),
     }),
 
+    QuestionBankTable: defineTable({
+        question: v.string(),
+        answer: v.string(),
+        programType: v.optional(v.string()),
+        courseTitle: v.optional(v.string()),
+        createdAt: v.number(),
+        updatedAt: v.number()
+    }),
+
     InterviewSessionTable: defineTable({
         interviewQuestions: v.any(),
         resumeUrl: v.union(v.string(), v.null()),
