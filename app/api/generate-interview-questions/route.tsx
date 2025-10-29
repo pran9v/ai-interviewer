@@ -32,10 +32,9 @@ export async function POST(req: NextRequest) {
     const { has } = await auth();
     const isSubscribedUser = has({ plan: 'pro' });
 
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: 'OpenAI API key not configured', details: 'Please add OPENAI_API_KEY to environment variables' }, { status: 500 });
-    }
+    const provider = (process.env.GENERATIVE_PROVIDER || 'gemini').toLowerCase();
 
+    // Build the user prompt
     const userPrompt = `Generate interview questions for a ${programType} program in ${courseTitle}.${
       courseDescription ? ` The program focuses on: ${courseDescription}` : ''
     }
@@ -44,44 +43,161 @@ Remember to cover academic preparation, research interests, motivation, practica
 
 Return ONLY the JSON array of questions and evaluation guidelines.`;
 
-    // Try a list of models in order until one works
-    const modelCandidates = ['gpt-4', 'gpt-4o', 'gpt-3.5-turbo'];
     let responseText: string | null = null;
-    let lastModelError: any = null;
+    let lastProviderError: any = null;
 
-    for (const model of modelCandidates) {
-      try {
-        console.log('Attempting generation with model:', model);
-        const completion = await openai.chat.completions.create({
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: 0.7,
-          max_tokens: 2000
-        });
+    // If Gemini is the provider (default), call Google Generative API using GEMINI_API_KEY
+    if (provider === 'gemini') {
+      const geminiKey = process.env.GEMINI_API_KEY;
+      if (!geminiKey) {
+        return NextResponse.json({ error: 'GEMINI_API_KEY not configured', details: 'Please add GEMINI_API_KEY to environment variables' }, { status: 500 });
+      }
 
-        responseText = completion.choices?.[0]?.message?.content || null;
-        if (!responseText) {
-          lastModelError = new Error('Empty response from OpenAI');
-          continue; // try next model
+      // Try chat-bison first, then text-bison
+      const endpoints = [
+        `https://generativelanguage.googleapis.com/v1beta2/models/chat-bison-001:generateMessage?key=${geminiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText?key=${geminiKey}`
+      ];
+
+      for (const url of endpoints) {
+        try {
+          console.log('Calling Gemini endpoint:', url);
+          const body = url.includes(':generateMessage') ? {
+            messages: [
+              { author: 'system', content: systemPrompt },
+              { author: 'user', content: userPrompt }
+            ],
+            temperature: 0.7,
+            maxOutputTokens: 1024
+          } : {
+            prompt: userPrompt,
+            temperature: 0.7,
+            maxOutputTokens: 1024
+          };
+
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+
+          if (!res.ok) {
+            const errText = await res.text();
+            lastProviderError = new Error(`Gemini ${res.status}: ${errText}`);
+            console.warn('Gemini endpoint failed:', res.status, errText);
+            continue;
+          }
+
+          const json = await res.json();
+          // Extract text from multiple possible shapes
+          const textCandidates: string[] = [];
+          if (Array.isArray(json?.candidates) && json.candidates[0]) {
+            const cand = json.candidates[0];
+            if (typeof cand.output === 'string') textCandidates.push(cand.output);
+            if (typeof cand.text === 'string') textCandidates.push(cand.text);
+            if (Array.isArray(cand?.content)) {
+              for (const part of cand.content) {
+                if (typeof part?.text === 'string') textCandidates.push(part.text);
+                if (typeof part?.text === 'object' && part?.text?.toString) textCandidates.push(part.text.toString());
+              }
+            }
+          }
+          // Older/newer chat responses
+          if (json?.message?.content) {
+            const content = json.message.content;
+            if (Array.isArray(content)) {
+              for (const c of content) if (c?.text) textCandidates.push(c.text);
+            } else if (typeof content === 'string') textCandidates.push(content);
+          }
+          if (json?.candidates?.[0]?.content?.[0]?.text) textCandidates.push(json.candidates[0].content[0].text);
+          if (json?.output?.[0]?.content?.[0]?.text) textCandidates.push(json.output[0].content[0].text);
+
+          // Fallback: if body contains a simple 'candidates[0].output' or 'candidates[0].content'
+          const extracted = textCandidates.find(t => typeof t === 'string' && t.trim().length > 0);
+          if (extracted) {
+            responseText = extracted;
+            break;
+          }
+
+          // As a last resort, stringify the whole response and try to find an array
+          const asString = JSON.stringify(json);
+          const match = asString.match(/\[\s*\{\s*"question"/);
+          if (match) {
+            // extract array substring
+            const start = asString.indexOf('[');
+            const end = asString.lastIndexOf(']') + 1;
+            responseText = asString.slice(start, end);
+            break;
+          }
+        } catch (gErr: any) {
+          lastProviderError = gErr;
+          console.warn('Gemini call error:', gErr?.message || gErr);
+          continue;
         }
+      }
 
-        // got response — break out of model loop
-        break;
-      } catch (mErr: any) {
-        lastModelError = mErr;
-        console.warn('Model', model, 'failed:', mErr?.message || mErr);
-        // If model not found or access denied, try next candidate
-        continue;
+      if (!responseText && lastProviderError) {
+        console.error('Gemini attempts failed:', lastProviderError?.message || lastProviderError);
+        // fall through to trying OpenAI if configured
+      }
+    }
+
+    // If responseText still empty and provider isn't strictly gemini-only, try OpenAI as a fallback
+    if (!responseText && provider !== 'openai') {
+      // If provider was explicitly set to gemini, still allow OpenAI fallback only if OPENAI_API_KEY exists
+      if (!process.env.OPENAI_API_KEY) {
+        // If we don't have any provider available, return an error
+        if (!responseText) {
+          return NextResponse.json({ error: 'No generation provider available', details: 'Gemini failed and OPENAI_API_KEY not set' }, { status: 502 });
+        }
+      }
+    }
+
+    // If provider == 'openai' or we're falling back to OpenAI, call OpenAI
+    if (!responseText && (provider === 'openai' || process.env.OPENAI_API_KEY)) {
+      if (!process.env.OPENAI_API_KEY) {
+        return NextResponse.json({ error: 'OpenAI API key not configured', details: 'Please add OPENAI_API_KEY to environment variables' }, { status: 500 });
+      }
+
+      // Try a list of models in order until one works
+      const modelCandidates = [process.env.OPENAI_MODEL || 'gpt-4', 'gpt-4o', 'gpt-3.5-turbo'];
+      let lastModelError: any = null;
+
+      for (const model of modelCandidates) {
+        try {
+          console.log('Attempting generation with OpenAI model:', model);
+          const completion = await openai.chat.completions.create({
+            model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.7,
+            max_tokens: 2000
+          });
+
+          responseText = completion.choices?.[0]?.message?.content || null;
+          if (!responseText) {
+            lastModelError = new Error('Empty response from OpenAI');
+            continue; // try next model
+          }
+
+          break;
+        } catch (mErr: any) {
+          lastModelError = mErr;
+          console.warn('OpenAI model', model, 'failed:', mErr?.message || mErr);
+          continue;
+        }
+      }
+
+      if (!responseText && lastModelError) {
+        console.error('All OpenAI model attempts failed:', lastModelError?.message || lastModelError);
+        throw lastModelError;
       }
     }
 
     if (!responseText) {
-      const msg = lastModelError?.message || 'No models succeeded';
-      console.error('All model attempts failed:', msg);
-      throw new Error(msg);
+      throw new Error('No response generated by provider');
     }
 
     try {
@@ -108,8 +224,8 @@ Return ONLY the JSON array of questions and evaluation guidelines.`;
       console.log('Successfully generated questions:', validatedQuestions.length);
       return NextResponse.json({ questions: validatedQuestions, status: 200 });
     } catch (e: any) {
-      console.error('Failed to parse OpenAI response:', e?.message || e, '\nResponseText:', responseText);
-      return NextResponse.json({ error: 'Failed to parse generated questions', details: e?.message || e, responseText: responseText.slice(0, 2000) }, { status: 502 });
+      console.error('Failed to parse response:', e?.message || e, '\nResponseText:', responseText);
+      return NextResponse.json({ error: 'Failed to parse generated questions', details: e?.message || e, responseText: responseText ? responseText.slice(0, 2000) : undefined }, { status: 502 });
     }
   } catch (error: any) {
     console.error('Error generating questions:', error?.message || error);
