@@ -129,13 +129,25 @@ function CreateInterviewDialog() {
                 <DialogHeader>
                     <DialogTitle>Please submit following details.</DialogTitle>
                     <DialogDescription>
-                        <div className="w-full mt-4">
-                            <label className="block mb-2 text-sm font-medium text-gray-700">Job Title</label>
-                            <Input
-                                placeholder="Enter job title (e.g. Software Engineer)"
-                                value={formData.jobTitle}
-                                onChange={(e) => onHandleInputChange('jobTitle', e.target.value)}
-                            />
+                        <div className="w-full mt-4 space-y-4">
+                            <div>
+                                <label className="block mb-2 text-sm font-medium text-gray-700">Job Title</label>
+                                <Input
+                                    placeholder="Enter job title (e.g. Software Engineer)"
+                                    value={formData.jobTitle}
+                                    onChange={(e) => onHandleInputChange('jobTitle', e.target.value)}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block mb-2 text-sm font-medium text-gray-700">Job Description</label>
+                                <Textarea
+                                    placeholder="Enter or paste the job description"
+                                    value={formData.jobDescription}
+                                    onChange={(e) => onHandleInputChange('jobDescription', e.target.value)}
+                                    className="h-[160px]"
+                                />
+                            </div>
                         </div>
                     </DialogDescription>
                 </DialogHeader>
