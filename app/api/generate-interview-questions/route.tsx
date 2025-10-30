@@ -175,36 +175,48 @@ Return ONLY the JSON array of questions and evaluation guidelines.`;
           let openAiText: string | null = null;
           let lastOpenAiError: any = null;
 
-          while (attempt < maxAttempts && !openAiText) {
-            try {
-              const completion = await openai.chat.completions.create({
-                model: 'gpt-4',
-                messages: [
-                  { role: 'system', content: systemPrompt },
-                  { role: 'user', content: userPrompt }
-                ],
-                temperature: 0.7,
-                max_tokens: 2000
-              });
+          // Try supported models in order
+          const openAiModels = ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo-0125'];
+          for (const model of openAiModels) {
+            attempt = 0;
+            while (attempt < maxAttempts && !openAiText) {
+              try {
+                const completion = await openai.chat.completions.create({
+                  model,
+                  messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt }
+                  ],
+                  temperature: 0.7,
+                  max_tokens: 2000
+                });
 
-              openAiText = completion.choices?.[0]?.message?.content || null;
-              if (openAiText) {
-                responseText = openAiText;
+                openAiText = completion.choices?.[0]?.message?.content || null;
+                if (openAiText) {
+                  responseText = openAiText;
+                  break;
+                }
+              } catch (oe: any) {
+                lastOpenAiError = oe;
+                const status = oe?.status || oe?.response?.status;
+                const message: string = oe?.message || oe?.response?.data?.error?.message || '';
+                const isRateLimited = status === 429 || /rate limit/i.test(message) || /You exceeded your current quota/i.test(message);
+                const isNotFound = status === 404 || /does not exist/i.test(message) || /not found/i.test(message);
+                if (isRateLimited && attempt < maxAttempts - 1) {
+                  const delayMs = 500 * Math.pow(2, attempt); // 500ms, 1000ms, 2000ms
+                  await new Promise(r => setTimeout(r, delayMs));
+                  attempt += 1;
+                  continue;
+                }
+                // If model is not available, try next model
+                if (isNotFound) {
+                  break;
+                }
+                // Non-retryable or last attempt: stop trying this model
                 break;
               }
-            } catch (oe: any) {
-              lastOpenAiError = oe;
-              const status = oe?.status || oe?.response?.status;
-              const isRateLimited = status === 429 || /rate limit/i.test(oe?.message || '') || /You exceeded your current quota/i.test(oe?.message || '');
-              if (isRateLimited && attempt < maxAttempts - 1) {
-                const delayMs = 500 * Math.pow(2, attempt); // 500ms, 1000ms, 2000ms
-                await new Promise(r => setTimeout(r, delayMs));
-                attempt += 1;
-                continue;
-              }
-              // Non-retryable or last attempt
-              break;
             }
+            if (openAiText) break; // got text from this model
           }
 
           if (!responseText) {
