@@ -43,13 +43,10 @@ Return ONLY the JSON array of questions and evaluation guidelines.`;
       return NextResponse.json({ error: 'GEMINI_API_KEY not configured', details: 'Please add GEMINI_API_KEY to environment variables' }, { status: 500 });
     }
 
-    // Prefer Gemini 1.5 models via generateContent; then fall back to older endpoints
+    // Use Gemini 1.5 models via generateContent only
     const endpoints = [
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${geminiKey}`,
-      // Legacy PaLM endpoints (kept as last resort if project still allows)
-      `https://generativelanguage.googleapis.com/v1beta2/models/chat-bison-001:generateMessage?key=${geminiKey}`,
-      `https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText?key=${geminiKey}`
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${geminiKey}`
     ];
 
     let responseText: string | null = null;
@@ -58,42 +55,21 @@ Return ONLY the JSON array of questions and evaluation guidelines.`;
     for (const url of endpoints) {
       try {
         console.log('Calling Gemini endpoint:', url);
-        // Build request body depending on endpoint type
-        let body: any;
-        if (url.includes(':generateContent')) {
-          // Gemini 1.x API
-          body = {
-            contents: [
-              {
-                role: 'user',
-                parts: [
-                  { text: `${systemPrompt}\n\n${userPrompt}` }
-                ]
-              }
-            ],
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 1024
+        // Build request body for Gemini 1.x API
+        const body = {
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { text: `${systemPrompt}\n\n${userPrompt}` }
+              ]
             }
-          };
-        } else if (url.includes(':generateMessage')) {
-          // Legacy chat-bison
-          body = {
-            messages: [
-              { author: 'system', content: systemPrompt },
-              { author: 'user', content: userPrompt }
-            ],
+          ],
+          generationConfig: {
             temperature: 0.7,
             maxOutputTokens: 1024
-          };
-        } else {
-          // Legacy text-bison
-          body = {
-            prompt: `${systemPrompt}\n\n${userPrompt}`,
-            temperature: 0.7,
-            maxOutputTokens: 1024
-          };
-        }
+          }
+        } as any;
 
         const res = await fetch(url, {
           method: 'POST',
@@ -109,35 +85,25 @@ Return ONLY the JSON array of questions and evaluation guidelines.`;
         }
 
         const json = await res.json();
+        if (!res.ok) {
+          // Stop trying other endpoints on 4xx config issues; try next model only
+          lastError = new Error(`Gemini ${res.status}: ${JSON.stringify(json)}`);
+          console.warn('Gemini endpoint failed:', res.status, json?.error?.message || json);
+          continue;
+        }
         // Extract text across Gemini 1.x and legacy shapes
         const textCandidates: string[] = [];
 
         // Gemini 1.x: candidates[0].content.parts[].text
         if (Array.isArray(json?.candidates) && json.candidates[0]) {
           const cand = json.candidates[0];
-          if (cand?.content?.parts && Array.isArray(cand.content.parts)) {
-            for (const part of cand.content.parts) {
+          const parts = cand?.content?.parts;
+          if (Array.isArray(parts)) {
+            for (const part of parts) {
               if (typeof part?.text === 'string') textCandidates.push(part.text);
             }
           }
-          // Some responses put text directly at candidates[0].content[0].text
-          if (Array.isArray(cand?.content)) {
-            for (const part of cand.content) {
-              if (typeof part?.text === 'string') textCandidates.push(part.text);
-            }
-          }
-          if (typeof cand.output === 'string') textCandidates.push(cand.output);
-          if (typeof cand.text === 'string') textCandidates.push(cand.text);
         }
-
-        // Legacy chat: json.message.content[*].text or string
-        if (json?.message?.content) {
-          const content = json.message.content;
-          if (Array.isArray(content)) {
-            for (const c of content) if (c?.text) textCandidates.push(c.text);
-          } else if (typeof content === 'string') textCandidates.push(content);
-        }
-        if (json?.output?.[0]?.content?.[0]?.text) textCandidates.push(json.output[0].content[0].text);
 
         // Choose first non-empty string
         const extracted = textCandidates.find(t => typeof t === 'string' && t.trim().length > 0);
