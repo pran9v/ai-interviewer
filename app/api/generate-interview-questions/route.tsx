@@ -43,10 +43,13 @@ Return ONLY the JSON array of questions and evaluation guidelines.`;
       return NextResponse.json({ error: 'GEMINI_API_KEY not configured', details: 'Please add GEMINI_API_KEY to environment variables' }, { status: 500 });
     }
 
-    // Use Gemini 1.5 models via generateContent only
+    // Use Gemini 1.5 models via v1 generateContent
     const endpoints = [
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${geminiKey}`
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${geminiKey}`,
+      // Fallback to -latest aliases if specific versions are unavailable
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${geminiKey}`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro-latest:generateContent?key=${geminiKey}`
     ];
 
     let responseText: string | null = null;
@@ -57,12 +60,14 @@ Return ONLY the JSON array of questions and evaluation guidelines.`;
         console.log('Calling Gemini endpoint:', url);
         // Build request body for Gemini 1.x API
         const body = {
+          systemInstruction: {
+            role: 'system',
+            parts: [{ text: systemPrompt }]
+          },
           contents: [
             {
               role: 'user',
-              parts: [
-                { text: `${systemPrompt}\n\n${userPrompt}` }
-              ]
+              parts: [{ text: userPrompt }]
             }
           ],
           generationConfig: {
