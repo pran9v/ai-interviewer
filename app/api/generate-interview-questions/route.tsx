@@ -163,9 +163,10 @@ Return ONLY the JSON array of questions and evaluation guidelines.`;
     if (!responseText) {
       console.error('Gemini generation failed:', lastError?.message || 'Unknown error');
 
-      // Fallback to OpenAI if configured
+      // Optionally fall back to OpenAI only if explicitly enabled
+      const allowOpenAiFallback = process.env.ENABLE_OPENAI_FALLBACK === 'true';
       const openaiApiKey = process.env.OPENAI_API_KEY;
-      if (openaiApiKey) {
+      if (allowOpenAiFallback && openaiApiKey) {
         try {
           const openai = new OpenAI({ apiKey: openaiApiKey });
 
