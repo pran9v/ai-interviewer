@@ -38,183 +38,244 @@ Remember to cover academic preparation, research interests, motivation, practica
 
 Return ONLY the JSON array of questions and evaluation guidelines.`;
 
-    const geminiKey = process.env.GEMINI_API_KEY;
-    if (!geminiKey) {
-      return NextResponse.json({ error: 'GEMINI_API_KEY not configured', details: 'Please add GEMINI_API_KEY to environment variables' }, { status: 500 });
-    }
-
-    // Use Gemini 1.5 models via v1 generateContent
-    const endpoints = [
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${geminiKey}`,
-      // Fallback to -latest aliases if specific versions are unavailable
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${geminiKey}`,
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro-latest:generateContent?key=${geminiKey}`
-    ];
-
     let responseText: string | null = null;
     let lastError: any = null;
+    let providerUsed: 'openai' | 'gemini' | null = null;
 
-    for (const url of endpoints) {
+    // Primary: OpenAI (ChatGPT)
+    const openaiApiKey = process.env.OPENAI_API_KEY;
+    if (openaiApiKey) {
       try {
-        console.log('Calling Gemini endpoint:', url);
-        // Build request body for Gemini 1.x API
-        const body = {
-          systemInstruction: {
-            role: 'system',
-            parts: [{ text: systemPrompt }]
-          },
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: userPrompt }]
-            }
-          ],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 1024
-          }
-        } as any;
+        const openai = new OpenAI({ apiKey: openaiApiKey });
 
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
+        // Exponential backoff retries for rate limits
+        const maxAttempts = 3;
+        let attempt = 0;
+        let openAiText: string | null = null;
+        let lastOpenAiError: any = null;
 
-        if (!res.ok) {
-          const errText = await res.text();
-          lastError = new Error(`Gemini ${res.status}: ${errText}`);
-          console.warn('Gemini endpoint failed:', res.status, errText);
-          continue;
-        }
+        // Try supported models in order
+        const openAiModels = ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo-0125'];
+        for (const model of openAiModels) {
+          attempt = 0;
+          while (attempt < maxAttempts && !openAiText) {
+            try {
+              const completion = await openai.chat.completions.create({
+                model,
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: userPrompt }
+                ],
+                temperature: 0.7,
+                max_tokens: 2000
+              });
 
-        const json = await res.json();
-        if (!res.ok) {
-          // Stop trying other endpoints on 4xx config issues; try next model only
-          lastError = new Error(`Gemini ${res.status}: ${JSON.stringify(json)}`);
-          console.warn('Gemini endpoint failed:', res.status, json?.error?.message || json);
-          continue;
-        }
-        // Extract text across Gemini 1.x and legacy shapes
-        const textCandidates: string[] = [];
-
-        // Gemini 1.x: candidates[0].content.parts[].text
-        if (Array.isArray(json?.candidates) && json.candidates[0]) {
-          const cand = json.candidates[0];
-          const parts = cand?.content?.parts;
-          if (Array.isArray(parts)) {
-            for (const part of parts) {
-              if (typeof part?.text === 'string') textCandidates.push(part.text);
-            }
-          }
-        }
-
-        // Choose first non-empty string
-        const extracted = textCandidates.find(t => typeof t === 'string' && t.trim().length > 0);
-        if (extracted) {
-          responseText = extracted;
-          break;
-        }
-
-        // As a last resort, stringify the whole response and try to find an array
-        const asString = JSON.stringify(json);
-        const match = asString.match(/\[\s*\{[\s\S]*\}\s*\]/m);
-        if (match) {
-          responseText = match[0];
-          break;
-        }
-      } catch (gErr: any) {
-        lastError = gErr;
-        console.warn('Gemini call error:', gErr?.message || gErr);
-        continue;
-      }
-    }
-
-    if (!responseText) {
-      console.error('Gemini generation failed:', lastError?.message || 'Unknown error');
-
-      // Optionally fall back to OpenAI only if explicitly enabled
-      const allowOpenAiFallback = process.env.ENABLE_OPENAI_FALLBACK === 'true';
-      const openaiApiKey = process.env.OPENAI_API_KEY;
-      if (allowOpenAiFallback && openaiApiKey) {
-        try {
-          const openai = new OpenAI({ apiKey: openaiApiKey });
-
-          // Exponential backoff retries for rate limits
-          const maxAttempts = 3;
-          let attempt = 0;
-          let openAiText: string | null = null;
-          let lastOpenAiError: any = null;
-
-          // Try supported models in order
-          const openAiModels = ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo-0125'];
-          for (const model of openAiModels) {
-            attempt = 0;
-            while (attempt < maxAttempts && !openAiText) {
-              try {
-                const completion = await openai.chat.completions.create({
-                  model,
-                  messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userPrompt }
-                  ],
-                  temperature: 0.7,
-                  max_tokens: 2000
-                });
-
-                openAiText = completion.choices?.[0]?.message?.content || null;
-                if (openAiText) {
-                  responseText = openAiText;
-                  break;
-                }
-              } catch (oe: any) {
-                lastOpenAiError = oe;
-                const status = oe?.status || oe?.response?.status;
-                const message: string = oe?.message || oe?.response?.data?.error?.message || '';
-                const isRateLimited = status === 429 || /rate limit/i.test(message) || /You exceeded your current quota/i.test(message);
-                const isNotFound = status === 404 || /does not exist/i.test(message) || /not found/i.test(message);
-                if (isRateLimited && attempt < maxAttempts - 1) {
-                  const delayMs = 500 * Math.pow(2, attempt); // 500ms, 1000ms, 2000ms
-                  await new Promise(r => setTimeout(r, delayMs));
-                  attempt += 1;
-                  continue;
-                }
-                // If model is not available, try next model
-                if (isNotFound) {
-                  break;
-                }
-                // Non-retryable or last attempt: stop trying this model
+              openAiText = completion.choices?.[0]?.message?.content || null;
+              if (openAiText) {
+                responseText = openAiText;
+                providerUsed = 'openai';
                 break;
               }
+            } catch (oe: any) {
+              lastOpenAiError = oe;
+              const status = oe?.status || oe?.response?.status;
+              const message: string = oe?.message || oe?.response?.data?.error?.message || '';
+              const isRateLimited = status === 429 || /rate limit/i.test(message) || /You exceeded your current quota/i.test(message);
+              const isNotFound = status === 404 || /does not exist/i.test(message) || /not found/i.test(message);
+              if (isRateLimited && attempt < maxAttempts - 1) {
+                const delayMs = 500 * Math.pow(2, attempt); // 500ms, 1000ms, 2000ms
+                await new Promise(r => setTimeout(r, delayMs));
+                attempt += 1;
+                continue;
+              }
+              // If model is not available, try next model
+              if (isNotFound) {
+                break;
+              }
+              // Non-retryable or last attempt: stop trying this model
+              break;
             }
-            if (openAiText) break; // got text from this model
           }
+          if (openAiText) break; // got text from this model
+        }
 
-          if (!responseText) {
-            const message = lastOpenAiError?.message || 'Unknown OpenAI error';
-            const status = lastOpenAiError?.status || lastOpenAiError?.response?.status;
-            const isRateLimited = status === 429 || /You exceeded your current quota/i.test(message);
+        if (!responseText) {
+          const message = lastOpenAiError?.message || 'Unknown OpenAI error';
+          const status = lastOpenAiError?.status || lastOpenAiError?.response?.status;
+          const isRateLimited = status === 429 || /You exceeded your current quota/i.test(message);
+          // If Gemini fallback is allowed, try it; otherwise return OpenAI error
+          const allowGeminiFallback = process.env.ENABLE_GEMINI_FALLBACK === 'true';
+          if (!allowGeminiFallback) {
             return NextResponse.json({
               error: 'Failed to generate questions',
               details: message,
               provider: 'openai'
             }, { status: isRateLimited ? 429 : 502 });
           }
-        } catch (fallbackErr: any) {
+          lastError = lastOpenAiError;
+        }
+      } catch (fallbackErr: any) {
+        // If Gemini fallback not allowed, surface OpenAI error
+        const allowGeminiFallback = process.env.ENABLE_GEMINI_FALLBACK === 'true';
+        if (!allowGeminiFallback) {
           return NextResponse.json({ 
             error: 'Failed to generate questions', 
             details: fallbackErr?.message || 'Unknown error',
             provider: 'openai'
           }, { status: 502 });
         }
-      } else {
-        return NextResponse.json({ 
-          error: 'Failed to generate questions', 
-          details: lastError?.message || 'Unknown error',
-          provider: 'gemini'
-        }, { status: 502 });
+        lastError = fallbackErr;
       }
+    }
+
+    // Fallback: Gemini (only if enabled)
+    if (!responseText) {
+      const allowGeminiFallback = process.env.ENABLE_GEMINI_FALLBACK === 'true';
+      const geminiKey = process.env.GEMINI_API_KEY;
+      if (allowGeminiFallback && geminiKey) {
+        // Use Gemini 1.5 models via v1 generateContent; prefer widely available models
+        const endpoints = [
+          `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+          `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-8b:generateContent?key=${geminiKey}`
+        ];
+
+        for (const url of endpoints) {
+          try {
+            console.log('Calling Gemini endpoint:', url);
+            // Build request body for Gemini 1.x API
+            const body = {
+              contents: [
+                {
+                  role: 'user',
+                  parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }]
+                }
+              ],
+              generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 1024
+              }
+            } as any;
+
+            const res = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body)
+            });
+
+            if (!res.ok) {
+              const errText = await res.text();
+              lastError = new Error(`Gemini ${res.status}: ${errText}`);
+              console.warn('Gemini endpoint failed:', res.status, errText);
+              continue;
+            }
+
+            const json = await res.json();
+            // Extract text across Gemini 1.x shapes
+            const textCandidates: string[] = [];
+            if (Array.isArray(json?.candidates) && json.candidates[0]) {
+              const cand = json.candidates[0];
+              const parts = cand?.content?.parts;
+              if (Array.isArray(parts)) {
+                for (const part of parts) {
+                  if (typeof part?.text === 'string') textCandidates.push(part.text);
+                }
+              }
+            }
+
+            const extracted = textCandidates.find(t => typeof t === 'string' && t.trim().length > 0);
+            if (extracted) {
+              responseText = extracted;
+              providerUsed = 'gemini';
+              break;
+            }
+
+            const asString = JSON.stringify(json);
+            const match = asString.match(/\[\s*\{[\s\S]*\}\s*\]/m);
+            if (match) {
+              responseText = match[0];
+              providerUsed = 'gemini';
+              break;
+            }
+          } catch (gErr: any) {
+            lastError = gErr;
+            console.warn('Gemini call error:', gErr?.message || gErr);
+            continue;
+          }
+        }
+      }
+    }
+
+    // Fallback: OpenRouter (only if enabled)
+    if (!responseText) {
+      const allowOpenRouterFallback = process.env.ENABLE_OPENROUTER_FALLBACK === 'true';
+      const openRouterKey = process.env.OPENROUTER_API_KEY;
+      if (allowOpenRouterFallback && openRouterKey) {
+        try {
+          const maxAttempts = 3;
+          const models = ['openai/gpt-4o-mini', 'meta-llama/llama-3.1-70b-instruct'];
+          let got = false;
+          for (const model of models) {
+            let attempt = 0;
+            while (attempt < maxAttempts && !got) {
+              try {
+                const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${openRouterKey}`,
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    model,
+                    messages: [
+                      { role: 'system', content: systemPrompt },
+                      { role: 'user', content: userPrompt }
+                    ],
+                    temperature: 0.7,
+                    max_tokens: 2000
+                  })
+                });
+                if (!resp.ok) {
+                  const errText = await resp.text();
+                  lastError = new Error(`OpenRouter ${resp.status}: ${errText}`);
+                  const isRateLimited = resp.status === 429;
+                  if (isRateLimited && attempt < maxAttempts - 1) {
+                    const delayMs = 500 * Math.pow(2, attempt);
+                    await new Promise(r => setTimeout(r, delayMs));
+                    attempt += 1;
+                    continue;
+                  }
+                  break; // try next model
+                }
+                const data = await resp.json();
+                const content = data?.choices?.[0]?.message?.content;
+                if (typeof content === 'string' && content.trim()) {
+                  responseText = content;
+                  providerUsed = 'gemini'; // keep provider tag generic or set 'openrouter'
+                  got = true;
+                  break;
+                }
+              } catch (e: any) {
+                lastError = e;
+                const delayMs = 500 * Math.pow(2, attempt);
+                await new Promise(r => setTimeout(r, delayMs));
+                attempt += 1;
+              }
+            }
+            if (got) break;
+          }
+        } catch (e: any) {
+          lastError = e;
+        }
+      }
+    }
+
+    if (!responseText) {
+      const provider = providerUsed || (openaiApiKey ? 'openai' : 'gemini');
+      return NextResponse.json({ 
+        error: 'Failed to generate questions', 
+        details: lastError?.message || 'Unknown error',
+        provider
+      }, { status: 502 });
     }
 
     try {
@@ -246,7 +307,7 @@ Return ONLY the JSON array of questions and evaluation guidelines.`;
         error: 'Failed to parse generated questions', 
         details: e?.message || e, 
         responseText: responseText ? responseText.slice(0, 2000) : undefined,
-        provider: 'gemini'
+        provider: providerUsed || 'openai'
       }, { status: 502 });
     }
   } catch (error: any) {
