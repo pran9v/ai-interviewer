@@ -19,6 +19,8 @@ import { api } from '@/convex/_generated/api'
 import { UserDetailContext } from '@/context/UserDetailContext'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { useUser } from '@clerk/nextjs'
+
 function CreateInterviewDialog() {
 
     const programTypes = [
@@ -36,7 +38,9 @@ function CreateInterviewDialog() {
     });
     const [loading, setLoading] = useState(false);
     const { userDetail, setUserDetail } = useContext(UserDetailContext);
-    const saveInterviewQuestion = useMutation(api.Interview.SaveInterviewQuestion)
+    const { user } = useUser(); // Add Clerk user hook
+    const saveInterviewQuestion = useMutation(api.Interview.SaveInterviewQuestion);
+    const CreateUser = useMutation(api.users.CreateNewUser); // Add CreateUser mutation
     const router = useRouter();
     
     const onHandleInputChange = (field: string, value: string) => {
@@ -54,6 +58,35 @@ function CreateInterviewDialog() {
 
         setLoading(true);
         try {
+            // Ensure user exists in database before creating interview
+            let userId = userDetail?._id;
+            
+            if (!userId && user) {
+                console.log('User detail not found, creating user in database...');
+                try {
+                    const result = await CreateUser({
+                        email: user.primaryEmailAddress?.emailAddress ?? '',
+                        imageUrl: user.imageUrl,
+                        name: user.fullName ?? ''
+                    });
+                    setUserDetail(result);
+                    // Handle both return types from CreateNewUser mutation
+                    userId = (result as any)._id || (result as any).result;
+                    console.log('User created successfully:', userId);
+                } catch (error) {
+                    console.error('Error creating user:', error);
+                    toast.error('Failed to initialize user profile. Please refresh the page.');
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            if (!userId) {
+                toast.error('User session not found. Please sign in again.');
+                setLoading(false);
+                return;
+            }
+
             const res = await axios.post('/api/generate-interview-questions', { 
                 programType: formData.programType,
                 courseTitle: formData.courseTitle,
@@ -63,16 +96,13 @@ function CreateInterviewDialog() {
 
             if (res?.data?.status === 429) {
                 toast.warning(res.data.result);
+                setLoading(false);
                 return;
             }
 
             if (!res.data?.questions) {
                 toast.error('No questions generated. Please try again.');
-                return;
-            }
-
-            if (!userDetail?._id) {
-                toast.error('User session not found');
+                setLoading(false);
                 return;
             }
 
@@ -80,7 +110,7 @@ function CreateInterviewDialog() {
             const interviewId = await saveInterviewQuestion({
                 questions: res.data.questions,
                 resumeUrl: undefined,
-                uid: userDetail._id as any,
+                uid: userId as any,
                 jobTitle: `${formData.programType} - ${formData.courseTitle}`, // Store combined for display
                 jobDescription: formData.courseDescription || undefined
             });
