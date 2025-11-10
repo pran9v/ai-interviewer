@@ -868,6 +868,8 @@ function StartInterview() {
                                     }
                                 }
                             }}
+                            hideBranding
+                            showSpeakingIndicators
                             instructions={`BACKGROUND:
 You are the AI screener for New York University and this is the interview created by the Head of Student Recruitment in the School of Business.
 

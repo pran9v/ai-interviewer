@@ -15,6 +15,8 @@ export interface RealtimeConfig {
   onError?: (error: Error) => void;
   onAudioTrack?: (track: MediaStreamTrack) => void;
   onTranscript?: (text: string, role: 'user' | 'assistant') => void;
+  onLocalStream?: (stream: MediaStream) => void;
+  onRemoteStream?: (stream: MediaStream) => void;
 }
 
 export interface RealtimeSession {
@@ -60,6 +62,7 @@ export class RealtimeWebRTC {
           this.audioElement.srcObject = event.streams[0];
         }
         this.config.onAudioTrack?.(event.track);
+        this.config.onRemoteStream?.(event.streams[0]);
       };
 
       // Handle connection state changes
@@ -90,6 +93,8 @@ export class RealtimeWebRTC {
         this.peerConnection?.addTrack(track, micStream);
         console.log('RealtimeWebRTC: Added microphone track to peer connection');
       });
+      // Expose local mic stream for UI analytics/visualization
+      this.config.onLocalStream?.(micStream);
 
       // Step 5: Create data channel for control messages
       this.dataChannel = this.peerConnection.createDataChannel('oai-events');
