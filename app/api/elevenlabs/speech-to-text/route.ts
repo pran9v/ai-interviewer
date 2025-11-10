@@ -19,12 +19,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Audio file is required' }, { status: 400 });
     }
 
-    // Convert File to buffer for ElevenLabs
-    const audioBuffer = await audioFile.arrayBuffer();
-    
-    // Transcribe using ElevenLabs Speech-to-Text
+    console.log('Received audio file:', audioFile.name, 'size:', audioFile.size, 'type:', audioFile.type);
+
+    // ElevenLabs expects a File object directly, not ArrayBuffer
     const transcription = await elevenlabs.speechToText.convert({
-      file: audioBuffer,
+      file: audioFile as any, // Pass File directly
       modelId: "scribe_v1",
       languageCode: "eng",
       tagAudioEvents: false,
@@ -47,6 +46,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error('ElevenLabs Speech-to-text error:', error);
+    console.error('Error status:', error.status);
+    console.error('Error code:', error.code);
+    console.error('Error body:', JSON.stringify(error.body, null, 2));
     
     // Check if it's a quota error
     if (error.code === 'insufficient_quota' || error.status === 429) {
@@ -59,7 +61,7 @@ export async function POST(req: NextRequest) {
     
     return NextResponse.json({ 
       error: 'Failed to transcribe audio',
-      details: error.message 
+      details: `Status code: ${error.status}\nBody: ${JSON.stringify(error.body, null, 2)}`
     }, { status: 500 });
   }
 }
