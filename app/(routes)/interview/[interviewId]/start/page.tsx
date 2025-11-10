@@ -7,14 +7,13 @@ import { useParams, useRouter } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Mic, MicOff, Play, Pause, Volume2, VolumeX, Keyboard } from 'lucide-react';
+import { Keyboard, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { FeedbackInfo } from '@/app/(routes)/dashboard/_components/FeedbackDialog';
 import { ConversationManager, ConversationMessage } from '@/app/utils/conversation-manager';
 import { AudioRecorder } from '@/app/utils/audio-recorder';
-import { InterviewerAvatar } from './_components/InterviewerAvatar';
-import { VoiceAssistant } from './_components/VoiceAssistant';
 import { motion } from 'motion/react';
+import { RealtimeVoice } from '@/app/components/RealtimeVoice';
 
 export type InterviewData = {
     jobTitle: string | null,
@@ -53,14 +52,17 @@ function StartInterview() {
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [volume, setVolume] = useState(0);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [isStopping, setIsStopping] = useState(false); // guard for idempotent stopping
-    const isAskingQuestionRef = useRef(false); // NEW: prevents multiple AI responses simultaneously
+    const [isStopping, setIsStopping] = useState(false);
+    const isAskingQuestionRef = useRef(false);
     const responseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const promptTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const forcedNoVoiceTimerRef = useRef<NodeJS.Timeout | null>(null); // watchdog fallback
-    const hasHeardSpeechSinceStartRef = useRef(false); // tracks if any speech detected this recording session
-    const FALLBACK_NO_VOICE_MS = 8000; // configurable fallback duration (ms) - longer than silence timeout
-    const postTTSWatchdogTimerRef = useRef<NodeJS.Timeout | null>(null); // ensures mic autostarts after TTS
+    const forcedNoVoiceTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const hasHeardSpeechSinceStartRef = useRef(false);
+    const realtimeClientRef = useRef<any>(null);
+    const assistantTranscriptBuffer = useRef<string>(''); // Accumulate AI responses before checking
+    const userTranscriptBuffer = useRef<string>(''); // Accumulate user responses before checking
+    const FALLBACK_NO_VOICE_MS = 8000;
+    const postTTSWatchdogTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     // Canonical helpers
     const clearAllTimers = () => {
@@ -700,14 +702,13 @@ function StartInterview() {
                 recordId: interviewData!._id
             });
 
-            // Start with welcome message and first question
-            const welcomeMessage = "Welcome to your interview. Let's begin with the first question.";
-            await speakText(welcomeMessage, async () => {
-                // After welcome, ask first question (no transition for first question)
-                await askNextQuestion(false);
-            });
+            // Set first question to trigger Realtime component display
+            const firstQuestion = await conversationManager?.askNextQuestion();
+            if (firstQuestion) {
+                setCurrentQuestion(firstQuestion);
+            }
             
-            toast.success('Interview started!');
+            toast.success('Interview started! Connect to begin.');
         } catch (error) {
             console.error('Error starting interview:', error);
             toast.error('Failed to start interview');
@@ -720,6 +721,15 @@ function StartInterview() {
         try {
             setLoading(true);
             
+            // Disconnect Realtime WebRTC if connected
+            if (realtimeClientRef.current) {
+                try {
+                    realtimeClientRef.current.disconnect();
+                } catch (err) {
+                    console.error('Error disconnecting Realtime client:', err);
+                }
+            }
+            
             // Stop any playing audio
             if (currentAudio) {
                 currentAudio.pause();
@@ -728,6 +738,13 @@ function StartInterview() {
 
             // Generate feedback
             const conversation = conversationManager?.getConversation() || [];
+            
+            if (conversation.length === 0) {
+                toast.error('No conversation found to generate feedback');
+                router.push('/dashboard');
+                return;
+            }
+            
             const response = await axios.post('/api/interview-feedback', {
                 messages: conversation
             });
@@ -762,194 +779,141 @@ function StartInterview() {
     const progress = conversationManager?.getProgress() || { current: 0, total: 0, percentage: 0 };
 
     return (
-        <div className="min-h-screen bg-gray-50 py-8 px-4">
-            <div className="max-w-4xl mx-auto">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center py-8 px-4">
+            <div className="max-w-3xl w-full">
                 {/* Header */}
-                <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                        {interviewData?.jobTitle || 'AI Interview'}
-                    </h1>
-                    <p className="text-gray-600">
-                        {interviewData?.jobDescription || 'Voice-based interview session'}
-                    </p>
-                </div>
-
-                {/* Progress Bar */}
-                <div className="mb-8">
-                    <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-medium text-gray-700">
-                            Question {progress.current} of {progress.total}
-                        </span>
-                        <span className="text-sm text-gray-500">
-                            {progress.percentage}% Complete
-                        </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${progress.percentage}%` }}
-                        ></div>
-                    </div>
-                </div>
-
-                {/* Current Question */}
-                {currentQuestion && (
-                    <motion.div 
-                        key={currentQuestion}
-                        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -20, scale: 0.95 }}
-                        transition={{ duration: 0.5, ease: "easeOut" }}
-                        className="bg-white rounded-lg p-6 mb-8 shadow-md border-l-4 border-blue-500"
+                <div className="text-center mb-12">
+                    <motion.h1 
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="text-4xl font-bold text-gray-900 mb-4"
                     >
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                            <span className="text-blue-500 mr-2">Q{progress.current}:</span>
-                            Current Question
-                        </h3>
-                        <p className="text-gray-700 text-lg leading-relaxed">{currentQuestion}</p>
+                        {interviewData?.jobTitle || 'AI Interview'}
+                    </motion.h1>
+                    <motion.p 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.2 }}
+                        className="text-lg text-gray-600"
+                    >
+                        Connect to start your voice interview
+                    </motion.p>
+                </div>
+
+                {/* Realtime Voice Component */}
+                {currentQuestion && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.3 }}
+                    >
+                        <RealtimeVoice
+                            ref={realtimeClientRef}
+                            onTranscript={(transcript, role) => {
+                                if (role === 'user') {
+                                    // Accumulate user transcript
+                                    userTranscriptBuffer.current += transcript;
+                                    
+                                    // Only process full sentences (when we get a pause or complete thought)
+                                    if (transcript.includes('.') || transcript.includes('?') || transcript.includes('!')) {
+                                        const fullResponse = userTranscriptBuffer.current.trim();
+                                        conversationManager?.addUserResponse(fullResponse);
+                                        
+                                        // Check if user is ending the interview (only on complete sentences)
+                                        const endPhrases = ['end the interview', 'finish the interview', "i'm done with the interview", "that's all for today", 'no more questions', 'end this interview'];
+                                        const lowerResponse = fullResponse.toLowerCase();
+                                        if (endPhrases.some(phrase => lowerResponse.includes(phrase))) {
+                                            console.log('User indicated interview end:', fullResponse);
+                                            setTimeout(() => endInterview(), 3000);
+                                        }
+                                        
+                                        // Update Convex conversation
+                                        updateConversation({
+                                            recordId: interviewData!._id,
+                                            conversation: conversationManager?.getConversation() || [],
+                                            currentQuestionIndex: conversationManager?.getCurrentQuestionIndex() || 0
+                                        });
+                                        
+                                        // Clear buffer after processing
+                                        userTranscriptBuffer.current = '';
+                                    }
+                                } else if (role === 'assistant') {
+                                    // Accumulate AI transcript
+                                    assistantTranscriptBuffer.current += transcript;
+                                    
+                                    // Only process full sentences
+                                    if (transcript.includes('.') || transcript.includes('?') || transcript.includes('!')) {
+                                        const fullResponse = assistantTranscriptBuffer.current.trim();
+                                        
+                                        // Only save QUESTIONS to conversation history (not acknowledgments)
+                                        // Check if this is an actual interview question (contains "?")
+                                        if (fullResponse.includes('?')) {
+                                            conversationManager?.getConversation().push({
+                                                from: 'bot',
+                                                text: fullResponse,
+                                                timestamp: Date.now()
+                                            });
+                                        }
+                                        
+                                        // Check if AI is concluding the interview (only on complete sentences)
+                                        const aiEndPhrases = ['this concludes our interview', 'that concludes our interview', 'this completes our interview', 'end of our interview', "we've completed the interview"];
+                                        const lowerResponse = fullResponse.toLowerCase();
+                                        if (aiEndPhrases.some(phrase => lowerResponse.includes(phrase))) {
+                                            console.log('AI concluded the interview:', fullResponse);
+                                            setTimeout(() => endInterview(), 5000);
+                                        }
+                                        
+                                        // Clear buffer after processing
+                                        assistantTranscriptBuffer.current = '';
+                                    }
+                                }
+                            }}
+                            instructions={`You are a professional interviewer conducting a live conversation for the role of ${interviewData?.jobTitle}.
+
+GREETING (First thing you say):
+Start with a warm, natural greeting. Choose ONE of these styles randomly:
+- "Hi! Thanks for joining me today. I'm excited to learn more about you. Are you ready to get started?"
+- "Hello! Great to meet you. I hope you're doing well today. Shall we begin the interview?"
+- "Hey there! Thanks for taking the time to speak with me. Are you all set to dive in?"
+- "Good to see you! I'm looking forward to our conversation. Ready when you are!"
+
+Wait for their confirmation before asking the first question.
+
+INTERVIEW QUESTIONS:
+Once they're ready, ask the following questions one at a time, in order:
+${interviewData?.interviewQuestions.map((q, i) => `   Q${i + 1}: "${q.question}"`).join('\n')}
+
+GUIDELINES:
+- After each question, pause and wait for the candidate to finish speaking
+- When they finish, give a brief, natural acknowledgment like "Thanks for sharing that" or "I appreciate your answer"
+- Keep your tone warm, confident, and conversational — like a real interviewer
+- Don't skip or change the question order
+- Continue until every question has been asked and answered
+- When all questions are done, say exactly: "Thank you for your time today. This concludes our interview."
+- Stay focused on the interview questions only`}
+                        />
                     </motion.div>
                 )}
 
-                {/* Conversation History */}
-                {conversationManager?.getConversation() && conversationManager.getConversation().length > 0 && (
-                    <div className="bg-white rounded-lg p-6 mb-8 shadow-sm">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Conversation:</h3>
-                        <div className="space-y-4 max-h-64 overflow-y-auto">
-                            {conversationManager.getConversation().map((message, index) => (
-                                <div 
-                                    key={index} 
-                                    className={`p-3 rounded-lg ${
-                                        message.from === 'bot' 
-                                            ? 'bg-blue-50 border-l-4 border-blue-400' 
-                                            : 'bg-green-50 border-l-4 border-green-400'
-                                    }`}
-                                >
-                                    <div className="flex justify-between items-start">
-                                        <span className="font-medium text-sm text-gray-600">
-                                            {message.from === 'bot' ? 'Interviewer' : 'You'}
-                                        </span>
-                                        <span className="text-xs text-gray-500">
-                                            {new Date(message.timestamp).toLocaleTimeString()}
-                                        </span>
-                                    </div>
-                                    <p className="text-gray-800 mt-1">{message.text}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+                {/* Start Interview Button */}
+                {!currentQuestion && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className="flex justify-center"
+                    >
+                        <Button 
+                            onClick={startInterviewSession}
+                            disabled={loading}
+                            size="lg"
+                            className="bg-purple-600 hover:bg-purple-700 px-12 py-6 text-lg"
+                        >
+                            <Zap className="w-5 h-5 mr-2" />
+                            {loading ? 'Starting...' : 'Start Interview'}
+                        </Button>
+                    </motion.div>
                 )}
-
-                {/* Voice Assistant Animation */}
-                <div className="bg-white rounded-lg p-8 mb-8 shadow-lg">
-                    <VoiceAssistant 
-                        isSpeaking={isSpeaking}
-                        isListening={isRecording}
-                        volume={volume}
-                    />
-                </div>
-
-                {/* Controls */}
-                <div className="bg-white rounded-lg p-6 shadow-sm">
-                    <div className="flex flex-col items-center space-y-4">
-                        
-                        {/* Status Indicator */}
-                        <div className="flex items-center space-x-2 text-sm font-medium">
-                            <div className={`w-3 h-3 rounded-full ${
-                                isProcessing ? 'bg-yellow-500 animate-pulse' :
-                                isRecording ? 'bg-red-500 animate-pulse' : 
-                                isSpeaking ? 'bg-blue-500 animate-pulse' : 
-                                'bg-green-500'
-                            }`}></div>
-                            <span className="text-gray-700">
-                                {isProcessing ? 'Processing your answer...' :
-                                 isRecording ? 'Recording... (will auto-stop after 3s of silence)' : 
-                                 isSpeaking ? 'AI is speaking...' : 
-                                 currentQuestion ? 'Ready to record' : 
-                                 'Waiting to start...'}
-                            </span>
-                        </div>
-
-                        {/* Control Buttons */}
-                        <div className="flex items-center space-x-4">
-                            {/* Start Interview Button */}
-                            {!currentQuestion && (
-                                <Button 
-                                    onClick={startInterviewSession}
-                                    disabled={loading}
-                                    size="lg"
-                                    className="bg-blue-600 hover:bg-blue-700"
-                                >
-                                    {loading ? 'Starting...' : 'Start Interview'}
-                                </Button>
-                            )}
-                            
-                            {/* Text Input Fallback */}
-                            {showTextInput && (
-                                <div className="flex items-center space-x-2">
-                                    <Keyboard className="w-5 h-5 text-gray-500" />
-                                    <Input
-                                        value={textResponse}
-                                        onChange={(e) => setTextResponse(e.target.value)}
-                                        placeholder="Type your response here..."
-                                        className="min-w-64"
-                                        onKeyPress={(e) => e.key === 'Enter' && submitTextResponse()}
-                                    />
-                                    <Button
-                                        onClick={submitTextResponse}
-                                        disabled={loading}
-                                        size="lg"
-                                        className="bg-blue-600 hover:bg-blue-700"
-                                    >
-                                        Submit
-                                    </Button>
-                                </div>
-                            )}
-                            
-                            {/* End Interview Button */}
-                            {conversationManager?.isComplete() && (
-                                <Button
-                                    onClick={endInterview}
-                                    disabled={loading}
-                                    size="lg"
-                                    className="bg-gray-600 hover:bg-gray-700"
-                                >
-                                    {loading ? 'Completing...' : 'End Interview'}
-                                </Button>
-                            )}
-
-                            {/* Mute Button */}
-                            {currentQuestion && (
-                                <Button
-                                    onClick={toggleMute}
-                                    variant="outline"
-                                    size="lg"
-                                >
-                                    {isMuted ? (
-                                        <>
-                                            <VolumeX className="w-5 h-5 mr-2" />
-                                            Unmute
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Volume2 className="w-5 h-5 mr-2" />
-                                            Mute
-                                        </>
-                                    )}
-                                </Button>
-                            )}
-                        </div>
-                        {/* Instructions */}
-                        <div className="text-center text-sm text-gray-500 max-w-md">
-                            <p>
-                                {!currentQuestion && "Make sure your microphone is working before starting."}
-                                {currentQuestion && !isRecording && !showTextInput && "The microphone will automatically start recording after the AI finishes speaking."}
-                                {isRecording && "Speak naturally. The recording will automatically stop after 3 seconds of silence."}
-                                {showTextInput && "Speech-to-text is unavailable. Please type your response and press Enter or click Submit."}
-                                {conversationManager?.isComplete() && "Interview completed! Click 'End Interview' to generate feedback."}
-                            </p>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     )
