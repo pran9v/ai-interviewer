@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       model: body.model || 'gpt-4o-realtime-preview-2024-12-17',
       voice: body.voice || 'alloy',
       instructions: body.instructions || 
-        'You are a professional job interviewer conducting a voice interview. ' +
+        'You are a professional university interviewer conducting a voice interview. ' +
         'Ask one question at a time, listen carefully to responses, and provide thoughtful follow-ups. ' +
         'Be conversational, encouraging, and professional.',
       temperature: body.temperature ?? 0.8,
