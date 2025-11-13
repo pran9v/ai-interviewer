@@ -116,8 +116,10 @@ export class RealtimeWebRTC {
           });
         }
         
-        // Removed initial response.create to prevent "How can I help you" greeting
-        // The greeting will be handled by the system prompt instructions
+        // Trigger AI to start the conversation with the personalized greeting from system prompt
+        this.sendMessage({
+          type: 'response.create'
+        });
       };
 
       // Step 6: Create and set local SDP offer
