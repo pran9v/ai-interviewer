@@ -14,6 +14,7 @@ import { ConversationManager, ConversationMessage } from '@/app/utils/conversati
 import { AudioRecorder } from '@/app/utils/audio-recorder';
 import { motion } from 'motion/react';
 import { RealtimeVoice } from '@/app/components/RealtimeVoice';
+import { useUser } from '@clerk/nextjs';
 
 export type InterviewData = {
     jobTitle: string | null,
@@ -37,6 +38,7 @@ type InterviewQuestions = {
 
 function StartInterview() {
     const { interviewId } = useParams();
+    const { user } = useUser();
     const convex = useConvex();
     const [interviewData, setInterviewData] = useState<InterviewData>();
     const [isRecording, setIsRecording] = useState(false);
@@ -870,15 +872,12 @@ function StartInterview() {
                             }}
                             hideBranding
                             showSpeakingIndicators
+                            userName={user?.firstName || 'there'}
                             instructions={`BACKGROUND:
 You are the AI screener for New York University and this is the interview created by the Head of Student Recruitment in the School of Business.
 
 GREETING (First thing you say):
-Start with a warm, natural greeting. Choose ONE of these styles randomly:
-- "Hi! Thanks for joining me today. I'm excited to learn more about you. Are you ready to get started?"
-- "Hello! Great to meet you. I hope you're doing well today. Shall we begin the interview?"
-- "Hey there! Thanks for taking the time to speak with me. Are you all set to dive in?"
-- "Good to see you! I'm looking forward to our conversation. Ready when you are!"
+Say: "Hey ${user?.firstName || 'there'}, hope you're ready for your interview screening today. Shall we begin?"
 
 Wait for their confirmation before asking the first question.
 
@@ -901,8 +900,15 @@ Conversation flow:
 
 Tone and style:
 - Keep tone warm, plain, and conversational — short sentences, neutral punctuation, no sales talk or emojis.
-- Sound encouraging but impartial; never praise or criticise responses.
+- Sound encouraging but impartial; give simple acknowledgments like "Got it" or "Okay" or "I see" after answers.
+- NEVER use enthusiastic responses like "That's amazing!", "Wow!", "Excellent!", or overly positive feedback.
+- Keep acknowledgments minimal, professional, and neutral.
 - Mirror language level and formality to the student's style when appropriate (adaptive register).
+
+Fact-checking:
+- If a student makes a factually incorrect statement, politely correct it with accurate information.
+- Example: "I appreciate your answer, but I should mention that [correct fact]. Now, let's continue..."
+- Keep corrections brief and professional, then move on.
 
 Topical boundaries:
 - Stay strictly within education-related context (programs, goals, readiness, logistics).

@@ -13,6 +13,7 @@ interface RealtimeVoiceProps {
   autoConnect?: boolean;
   hideBranding?: boolean;
   showSpeakingIndicators?: boolean;
+  userName?: string;
 }
 
 export interface RealtimeVoiceHandle {
@@ -26,6 +27,7 @@ export const RealtimeVoice = forwardRef<RealtimeVoiceHandle, RealtimeVoiceProps>
   autoConnect = false,
   hideBranding = false,
   showSpeakingIndicators = false,
+  userName,
 }, ref) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);

@@ -116,14 +116,8 @@ export class RealtimeWebRTC {
           });
         }
         
-        // Send initial message to start the conversation
-        this.sendMessage({
-          type: 'response.create',
-          response: {
-            modalities: ['text', 'audio'],
-            instructions: 'Start the conversation by greeting the user and asking the first question.'
-          }
-        });
+        // Removed initial response.create to prevent "How can I help you" greeting
+        // The greeting will be handled by the system prompt instructions
       };
 
       // Step 6: Create and set local SDP offer
