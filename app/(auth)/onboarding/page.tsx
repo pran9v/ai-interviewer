@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useSignUp, useSignIn } from '@clerk/nextjs'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -12,7 +12,7 @@ import { Building2, Users, Check, Loader2 } from 'lucide-react'
 type RecruiterType = 'recruitment-team' | 'recruitment-agency' | null
 type AuthMode = 'signup' | 'signin'
 
-export default function OnboardingPage() {
+function OnboardingContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { isLoaded: signUpLoaded, signUp, setActive: setActiveSignUp } = useSignUp()
@@ -644,5 +644,20 @@ export default function OnboardingPage() {
         </motion.div>
       </div>
     </div>
+  )
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mx-auto mb-4" />
+          <p className="text-lg text-gray-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <OnboardingContent />
+    </Suspense>
   )
 }
