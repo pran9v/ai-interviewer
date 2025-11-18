@@ -79,9 +79,8 @@ function OnboardingContent() {
     setLoading(true)
 
     try {
+      // Create sign up with required fields only
       await signUp?.create({
-        firstName,
-        lastName,
         emailAddress: email,
         password,
       })
@@ -115,6 +114,19 @@ function OnboardingContent() {
       if (completeSignUp?.status === 'complete') {
         // Set the active session immediately after verification
         await setActiveSignUp({ session: completeSignUp.createdSessionId })
+        
+        // Update user profile with name if provided
+        if (firstName || lastName) {
+          try {
+            await completeSignUp.update({
+              firstName: firstName || undefined,
+              lastName: lastName || undefined,
+            })
+          } catch (updateErr) {
+            console.error('Error updating name:', updateErr)
+            // Continue anyway - name update is optional
+          }
+        }
         
         // Move to recruiter type selection
         setStep(2)
