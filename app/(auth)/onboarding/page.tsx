@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
-import { Building2, Users, Check, Loader2 } from 'lucide-react'
+import { Building2, Users, Check, Loader2, Upload } from 'lucide-react'
 
 type RecruiterType = 'recruitment-team' | 'recruitment-agency' | null
 type AuthMode = 'signup' | 'signin'
@@ -39,6 +39,28 @@ function OnboardingContent() {
   const [recruiterType, setRecruiterType] = useState<RecruiterType>(null)
   const [verificationCode, setVerificationCode] = useState('')
   const [pendingVerification, setPendingVerification] = useState(false)
+  
+  // University data (new fields)
+  const [universityWebsite, setUniversityWebsite] = useState('')
+  const [universityName, setUniversityName] = useState('')
+  const [universityLogo, setUniversityLogo] = useState('')
+  const [universityAbout, setUniversityAbout] = useState('')
+  const [websiteValid, setWebsiteValid] = useState(false)
+
+  // Validate website URL
+  const validateWebsite = (url: string) => {
+    const urlPattern = /^[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(\.[a-zA-Z]{2,})?$/
+    const isValid = urlPattern.test(url)
+    setWebsiteValid(isValid)
+    return isValid
+  }
+
+  // Handle website input change
+  const handleWebsiteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setUniversityWebsite(value)
+    validateWebsite(value)
+  }
 
   // Sign In handler
   const handleSignIn = async (e: React.FormEvent) => {
@@ -143,16 +165,40 @@ function OnboardingContent() {
   }
 
   // Recruiter type selection handler
-  const handleRecruiterTypeSelection = async (type: RecruiterType) => {
+  const handleRecruiterTypeSelection = (type: RecruiterType) => {
     setRecruiterType(type)
+    setStep(3) // Move to university website step
+    toast.success('Great! Now let\'s set up your university details.')
+  }
+
+  // University website submission handler
+  const handleUniversityWebsite = () => {
+    if (!websiteValid || !universityWebsite) {
+      toast.error('Please enter a valid website URL')
+      return
+    }
+    setStep(4) // Move to university details step
+  }
+
+  // Final university details submission handler
+  const handleUniversityDetails = async () => {
+    if (!universityName) {
+      toast.error('Please enter your university name')
+      return
+    }
+
     setLoading(true)
 
     try {
-      // Update user metadata with recruiter type using the user object
+      // Update user metadata with all information
       if (user) {
         await user.update({
           unsafeMetadata: {
-            recruiterType: type
+            recruiterType,
+            universityWebsite: `https://${universityWebsite}`,
+            universityName,
+            universityLogo,
+            universityAbout
           }
         })
         
@@ -222,7 +268,8 @@ function OnboardingContent() {
                   {[
                     { num: 1, title: 'Register your', subtitle: 'account' },
                     { num: 2, title: 'Set up your profile', subtitle: 'information' },
-                    { num: 3, title: 'Verify your identity', subtitle: 'through passport' }
+                    { num: 3, title: 'Add university', subtitle: 'website' },
+                    { num: 4, title: 'Complete university', subtitle: 'details' }
                   ].map((item, idx) => (
                     <motion.div
                       key={item.num}
@@ -596,6 +643,150 @@ function OnboardingContent() {
                     >
                       Back
                     </Button>
+                  </motion.div>
+                )}
+
+                {step === 3 && (
+                  <motion.div
+                    key="step3"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                  >
+                    <h2 className="text-3xl font-bold text-gray-900 mb-2">University website</h2>
+                    <p className="text-gray-500 mb-8">Enter your university's website URL</p>
+
+                    <div className="space-y-6">
+                      <div className="relative">
+                        <div className="flex items-center gap-2 border-2 border-gray-200 rounded-xl p-4 focus-within:border-indigo-600 transition-colors bg-gray-50">
+                          <span className="text-gray-600 font-medium text-sm">https://</span>
+                          <Input
+                            type="text"
+                            placeholder="www.dezignplex.com"
+                            value={universityWebsite}
+                            onChange={handleWebsiteChange}
+                            className="flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-2 bg-transparent"
+                          />
+                          {websiteValid && universityWebsite && (
+                            <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                              <Check className="w-5 h-5 text-white" />
+                            </div>
+                          )}
+                        </div>
+                        {universityWebsite && !websiteValid && (
+                          <p className="text-red-500 text-sm mt-2">Please enter a valid domain (e.g., example.com)</p>
+                        )}
+                      </div>
+
+                      <Button
+                        onClick={handleUniversityWebsite}
+                        disabled={!websiteValid || loading}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-6 text-lg font-semibold rounded-xl"
+                      >
+                        Next
+                      </Button>
+
+                      <Button
+                        onClick={() => setStep(2)}
+                        variant="ghost"
+                        className="w-full"
+                      >
+                        Back
+                      </Button>
+                    </div>
+                  </motion.div>
+                )}
+
+                {step === 4 && (
+                  <motion.div
+                    key="step4"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                  >
+                    <h2 className="text-3xl font-bold text-gray-900 mb-2">University website</h2>
+                    <p className="text-gray-500 mb-8">Tell us more about your university</p>
+
+                    <div className="space-y-6">
+                      <div className="relative">
+                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-600">
+                          <Building2 className="w-5 h-5" />
+                        </div>
+                        <Input
+                          type="text"
+                          placeholder="University name*"
+                          value={universityName}
+                          onChange={(e) => setUniversityName(e.target.value)}
+                          className="w-full border-2 border-gray-200 rounded-xl p-4 pl-12 text-base focus:border-indigo-600"
+                        />
+                      </div>
+
+                      <div className="border-2 border-gray-200 rounded-xl p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
+                            <Building2 className="w-5 h-5 text-indigo-600" />
+                          </div>
+                          <span className="text-gray-700">University Logo</span>
+                          <Button
+                            variant="outline"
+                            className="ml-auto text-indigo-600 border-indigo-600"
+                            onClick={() => {
+                              // File upload logic here
+                              const input = document.createElement('input')
+                              input.type = 'file'
+                              input.accept = 'image/*'
+                              input.onchange = (e: any) => {
+                                const file = e.target?.files?.[0]
+                                if (file) {
+                                  // Handle file upload
+                                  const reader = new FileReader()
+                                  reader.onloadend = () => {
+                                    setUniversityLogo(reader.result as string)
+                                  }
+                                  reader.readAsDataURL(file)
+                                }
+                              }
+                              input.click()
+                            }}
+                          >
+                            Upload ↑
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <textarea
+                          placeholder="About your University"
+                          value={universityAbout}
+                          onChange={(e) => setUniversityAbout(e.target.value)}
+                          rows={6}
+                          className="w-full border-2 border-gray-200 rounded-xl p-4 text-base resize-none focus:border-indigo-600 focus:outline-none transition-colors"
+                        />
+                      </div>
+
+                      <Button
+                        onClick={handleUniversityDetails}
+                        disabled={!universityName || loading}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-6 text-lg font-semibold rounded-xl"
+                      >
+                        {loading ? (
+                          <>
+                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                            Setting up...
+                          </>
+                        ) : (
+                          'Next'
+                        )}
+                      </Button>
+
+                      <Button
+                        onClick={() => setStep(3)}
+                        variant="ghost"
+                        className="w-full"
+                      >
+                        Back
+                      </Button>
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
