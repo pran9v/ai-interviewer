@@ -113,6 +113,9 @@ function OnboardingContent() {
       })
 
       if (completeSignUp?.status === 'complete') {
+        // Set the active session immediately after verification
+        await setActiveSignUp({ session: completeSignUp.createdSessionId })
+        
         // Move to recruiter type selection
         setStep(2)
         setPendingVerification(false)
@@ -132,38 +135,19 @@ function OnboardingContent() {
     setLoading(true)
 
     try {
-      // Store recruiter type in user metadata
+      // Update user metadata with recruiter type
       await signUp?.update({
         unsafeMetadata: {
           recruiterType: type
         }
       })
 
-      // Move to completion step
-      setStep(3)
-      toast.success('Profile information saved!')
+      // Redirect to dashboard
+      toast.success('Profile setup complete!')
+      router.push('/dashboard')
     } catch (err: any) {
       console.error('Error saving profile:', err)
       toast.error('Failed to save profile information')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Complete onboarding
-  const handleComplete = async () => {
-    setLoading(true)
-    
-    try {
-      if (signUp?.status === 'complete' && setActiveSignUp) {
-        await setActiveSignUp({ session: signUp.createdSessionId })
-        router.push('/dashboard')
-      } else {
-        toast.error('Please complete all steps')
-      }
-    } catch (err: any) {
-      console.error('Error completing setup:', err)
-      toast.error('Failed to complete setup')
     } finally {
       setLoading(false)
     }
@@ -593,46 +577,6 @@ function OnboardingContent() {
                       onClick={() => setStep(1)}
                       variant="ghost"
                       className="w-full mt-6"
-                    >
-                      Back
-                    </Button>
-                  </motion.div>
-                )}
-
-                {step === 3 && (
-                  <motion.div
-                    key="step3"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    className="text-center py-8"
-                  >
-                    <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <Check className="w-10 h-10 text-green-600" />
-                    </div>
-                    
-                    <h2 className="text-3xl font-bold text-gray-900 mb-2">Setup Complete!</h2>
-                    <p className="text-gray-500 mb-8">Your account is ready to use</p>
-
-                    <div className="bg-indigo-50 rounded-2xl p-6 mb-8">
-                      <p className="text-sm text-gray-600 mb-2">Account Type</p>
-                      <p className="text-lg font-semibold text-gray-900 capitalize">
-                        {recruiterType?.replace('-', ' ')}
-                      </p>
-                    </div>
-
-                    <Button
-                      onClick={handleComplete}
-                      disabled={loading}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-6 text-lg font-semibold rounded-xl"
-                    >
-                      {loading ? 'Setting up...' : 'Go to Dashboard'}
-                    </Button>
-
-                    <Button
-                      onClick={() => setStep(2)}
-                      variant="ghost"
-                      className="w-full mt-4"
                     >
                       Back
                     </Button>

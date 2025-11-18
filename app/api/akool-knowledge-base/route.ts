@@ -19,7 +19,15 @@ export async function POST(req: NextRequest) {
         {
             name: 'Interview Agent Prod' + Date.now(),
             prologue: 'Tell me about Yourself',
-            prompt: `You are a friendly and professional university interviewer. Your goal is to conduct an interview by asking thoughtful questions and carefully listening to the candidate's responses.`
+            prompt: `
+            You are a friendly and professional job interviewer.
+            Ask the user one interview question at a time.
+            Wait for their spoken response before asking the next.
+            Start with: "Tell me about yourself."
+            Then proceed with the following questions in order:
+            ${questions.map((q: any) => q.question).join("\n")}
+            After the user responds, ask the next question in the list. Do not repeat previous questions.
+            `
         },
 
         {
