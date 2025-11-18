@@ -1,21 +1,33 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useSignUp } from '@clerk/nextjs'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useSignUp, useSignIn } from '@clerk/nextjs'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
-import { Building2, Users, Check } from 'lucide-react'
+import { Building2, Users, Check, Loader2 } from 'lucide-react'
 
 type RecruiterType = 'recruitment-team' | 'recruitment-agency' | null
+type AuthMode = 'signup' | 'signin'
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const { isLoaded, signUp, setActive } = useSignUp()
+  const searchParams = useSearchParams()
+  const { isLoaded: signUpLoaded, signUp, setActive: setActiveSignUp } = useSignUp()
+  const { isLoaded: signInLoaded, signIn, setActive: setActiveSignIn } = useSignIn()
+  const [authMode, setAuthMode] = useState<AuthMode>('signup')
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
+
+  // Check URL params for auth mode
+  useEffect(() => {
+    const mode = searchParams?.get('mode')
+    if (mode === 'signin') {
+      setAuthMode('signin')
+    }
+  }, [searchParams])
   
   // Form data
   const [firstName, setFirstName] = useState('')
@@ -24,11 +36,40 @@ export default function OnboardingPage() {
   const [password, setPassword] = useState('')
   const [agreeToTerms, setAgreeToTerms] = useState(false)
   const [recruiterType, setRecruiterType] = useState<RecruiterType>(null)
+  const [verificationCode, setVerificationCode] = useState('')
+  const [pendingVerification, setPendingVerification] = useState(false)
 
+  // Sign In handler
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!signInLoaded) return
+
+    setLoading(true)
+
+    try {
+      const result = await signIn?.create({
+        identifier: email,
+        password,
+      })
+
+      if (result?.status === 'complete') {
+        await setActiveSignIn({ session: result.createdSessionId })
+        router.push('/dashboard')
+      }
+    } catch (err: any) {
+      console.error('Sign in error:', err)
+      toast.error(err.errors?.[0]?.message || 'Failed to sign in')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Sign Up handler
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!isLoaded) return
+    if (!signUpLoaded) return
     
     if (!agreeToTerms) {
       toast.error('Please agree to the terms & privacy policy')
@@ -38,7 +79,7 @@ export default function OnboardingPage() {
     setLoading(true)
 
     try {
-      await signUp.create({
+      await signUp?.create({
         firstName,
         lastName,
         emailAddress: email,
@@ -46,19 +87,46 @@ export default function OnboardingPage() {
       })
 
       // Send email verification code
-      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' })
+      await signUp?.prepareEmailAddressVerification({ strategy: 'email_code' })
 
-      // Move to recruiter type selection
-      setStep(2)
-      toast.success('Account created! Please select your role.')
+      setPendingVerification(true)
+      toast.success('Verification code sent to your email!')
     } catch (err: any) {
-      console.error('Error:', err)
+      console.error('Sign up error:', err)
       toast.error(err.errors?.[0]?.message || 'Failed to create account')
     } finally {
       setLoading(false)
     }
   }
 
+  // Email verification handler
+  const handleVerifyEmail = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!signUpLoaded) return
+
+    setLoading(true)
+
+    try {
+      const completeSignUp = await signUp?.attemptEmailAddressVerification({
+        code: verificationCode,
+      })
+
+      if (completeSignUp?.status === 'complete') {
+        // Move to recruiter type selection
+        setStep(2)
+        setPendingVerification(false)
+        toast.success('Email verified! Please select your role.')
+      }
+    } catch (err: any) {
+      console.error('Verification error:', err)
+      toast.error(err.errors?.[0]?.message || 'Invalid verification code')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Recruiter type selection handler
   const handleRecruiterTypeSelection = async (type: RecruiterType) => {
     setRecruiterType(type)
     setLoading(true)
@@ -71,33 +139,49 @@ export default function OnboardingPage() {
         }
       })
 
-      // Move to next step
+      // Move to completion step
       setStep(3)
       toast.success('Profile information saved!')
     } catch (err: any) {
-      console.error('Error:', err)
+      console.error('Error saving profile:', err)
       toast.error('Failed to save profile information')
     } finally {
       setLoading(false)
     }
   }
 
+  // Complete onboarding
   const handleComplete = async () => {
     setLoading(true)
     
     try {
-      // Complete the sign up process
-      if (signUp?.status === 'complete' && setActive) {
-        await setActive({ session: signUp.createdSessionId })
+      if (signUp?.status === 'complete' && setActiveSignUp) {
+        await setActiveSignUp({ session: signUp.createdSessionId })
         router.push('/dashboard')
       } else {
         toast.error('Please complete all steps')
       }
     } catch (err: any) {
-      console.error('Error:', err)
+      console.error('Error completing setup:', err)
       toast.error('Failed to complete setup')
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Google OAuth handler
+  const handleGoogleSignIn = async () => {
+    if (!signUpLoaded) return
+
+    try {
+      await signUp?.authenticateWithRedirect({
+        strategy: 'oauth_google',
+        redirectUrl: '/sso-callback',
+        redirectUrlComplete: '/dashboard',
+      })
+    } catch (err: any) {
+      console.error('Google sign in error:', err)
+      toast.error('Failed to sign in with Google')
     }
   }
 
@@ -177,21 +261,26 @@ export default function OnboardingPage() {
             {/* Right Panel - Form Content */}
             <div className="lg:w-1/2 p-12">
               <AnimatePresence mode="wait">
-                {step === 1 && (
+                {step === 1 && !pendingVerification && (
                   <motion.div
                     key="step1"
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
                   >
-                    <h2 className="text-3xl font-bold text-gray-900 mb-2">Get Started Now</h2>
-                    <p className="text-gray-500 mb-8">Create your account to begin</p>
+                    <h2 className="text-3xl font-bold text-gray-900 mb-2">
+                      {authMode === 'signup' ? 'Get Started Now' : 'Welcome Back'}
+                    </h2>
+                    <p className="text-gray-500 mb-8">
+                      {authMode === 'signup' ? 'Create your account to begin' : 'Sign in to your account'}
+                    </p>
 
                     {/* Google Sign In */}
                     <Button
                       variant="outline"
                       className="w-full mb-6 py-6 border-2 hover:bg-gray-50"
-                      onClick={() => toast.info('Google sign in coming soon')}
+                      onClick={handleGoogleSignIn}
+                      type="button"
                     >
                       <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -199,7 +288,7 @@ export default function OnboardingPage() {
                         <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                         <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                       </svg>
-                      Log in with Google
+                      Continue with Google
                     </Button>
 
                     <div className="relative mb-6">
@@ -212,80 +301,209 @@ export default function OnboardingPage() {
                     </div>
 
                     {/* Sign Up Form */}
-                    <form onSubmit={handleSignUp} className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <Input
-                          placeholder="First name"
-                          value={firstName}
-                          onChange={(e) => setFirstName(e.target.value)}
-                          required
-                          className="py-6"
-                        />
-                        <Input
-                          placeholder="Last name"
-                          value={lastName}
-                          onChange={(e) => setLastName(e.target.value)}
-                          required
-                          className="py-6"
-                        />
-                      </div>
+                    {authMode === 'signup' && (
+                      <form onSubmit={handleSignUp} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <Input
+                            placeholder="First name"
+                            value={firstName}
+                            onChange={(e) => setFirstName(e.target.value)}
+                            required
+                            className="py-6"
+                          />
+                          <Input
+                            placeholder="Last name"
+                            value={lastName}
+                            onChange={(e) => setLastName(e.target.value)}
+                            required
+                            className="py-6"
+                          />
+                        </div>
 
+                        <div className="relative">
+                          <Input
+                            type="email"
+                            placeholder="Email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                            className="py-6 pr-10"
+                          />
+                          <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                        </div>
+
+                        <div className="relative">
+                          <Input
+                            type="password"
+                            placeholder="Password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            className="py-6 pr-10"
+                          />
+                          <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="terms"
+                            checked={agreeToTerms}
+                            onChange={(e) => setAgreeToTerms(e.target.checked)}
+                            className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                          />
+                          <label htmlFor="terms" className="text-sm text-gray-600">
+                            I agree to the Terms & privacy
+                          </label>
+                        </div>
+
+                        <Button
+                          type="submit"
+                          disabled={loading}
+                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-6 text-lg font-semibold rounded-xl"
+                        >
+                          {loading ? (
+                            <>
+                              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                              Creating account...
+                            </>
+                          ) : (
+                            'Sign up'
+                          )}
+                        </Button>
+                      </form>
+                    )}
+
+                    {/* Sign In Form */}
+                    {authMode === 'signin' && (
+                      <form onSubmit={handleSignIn} className="space-y-4">
+                        <div className="relative">
+                          <Input
+                            type="email"
+                            placeholder="Email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                            className="py-6 pr-10"
+                          />
+                          <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                        </div>
+
+                        <div className="relative">
+                          <Input
+                            type="password"
+                            placeholder="Password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            className="py-6 pr-10"
+                          />
+                          <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                        </div>
+
+                        <Button
+                          type="submit"
+                          disabled={loading}
+                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-6 text-lg font-semibold rounded-xl"
+                        >
+                          {loading ? (
+                            <>
+                              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                              Signing in...
+                            </>
+                          ) : (
+                            'Sign in'
+                          )}
+                        </Button>
+                      </form>
+                    )}
+
+                    <p className="text-center text-sm text-gray-600 mt-6">
+                      {authMode === 'signup' ? (
+                        <>
+                          Have a account?{' '}
+                          <button
+                            type="button"
+                            onClick={() => setAuthMode('signin')}
+                            className="text-indigo-600 font-semibold hover:underline"
+                          >
+                            Sign in
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          Don't have an account?{' '}
+                          <button
+                            type="button"
+                            onClick={() => setAuthMode('signup')}
+                            className="text-indigo-600 font-semibold hover:underline"
+                          >
+                            Sign up
+                          </button>
+                        </>
+                      )}
+                    </p>
+                  </motion.div>
+                )}
+
+                {/* Email Verification Step */}
+                {step === 1 && pendingVerification && (
+                  <motion.div
+                    key="verification"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                  >
+                    <h2 className="text-3xl font-bold text-gray-900 mb-2">Verify Your Email</h2>
+                    <p className="text-gray-500 mb-8">
+                      We sent a verification code to <strong>{email}</strong>
+                    </p>
+
+                    <form onSubmit={handleVerifyEmail} className="space-y-4">
                       <div className="relative">
                         <Input
-                          type="email"
-                          placeholder="Email"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
+                          type="text"
+                          placeholder="Enter 6-digit code"
+                          value={verificationCode}
+                          onChange={(e) => setVerificationCode(e.target.value)}
                           required
-                          className="py-6 pr-10"
+                          maxLength={6}
+                          className="py-6 text-center text-2xl tracking-widest"
                         />
-                        <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                      </div>
-
-                      <div className="relative">
-                        <Input
-                          type="password"
-                          placeholder="Password"
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          required
-                          className="py-6 pr-10"
-                        />
-                        <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id="terms"
-                          checked={agreeToTerms}
-                          onChange={(e) => setAgreeToTerms(e.target.checked)}
-                          className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                        />
-                        <label htmlFor="terms" className="text-sm text-gray-600">
-                          I agree to the Terms & privacy
-                        </label>
                       </div>
 
                       <Button
                         type="submit"
-                        disabled={loading}
+                        disabled={loading || verificationCode.length !== 6}
                         className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-6 text-lg font-semibold rounded-xl"
                       >
-                        {loading ? 'Creating account...' : 'Sign up'}
+                        {loading ? (
+                          <>
+                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                            Verifying...
+                          </>
+                        ) : (
+                          'Verify Email'
+                        )}
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setPendingVerification(false)}
+                        className="w-full"
+                      >
+                        Back
                       </Button>
                     </form>
-
-                    <p className="text-center text-sm text-gray-600 mt-6">
-                      Have a account?{' '}
-                      <a href="/sign-in" className="text-indigo-600 font-semibold hover:underline">
-                        Sign in
-                      </a>
-                    </p>
                   </motion.div>
                 )}
 
