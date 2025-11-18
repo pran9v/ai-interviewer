@@ -1,9 +1,15 @@
-import { SignUp } from '@clerk/nextjs'
+'use client'
+
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
 export default function Page() {
-    return (
-        <div className='flex items-center justify-center h-screen'>
-            <SignUp />
-        </div>
-    )
+    const router = useRouter()
+    
+    useEffect(() => {
+        // Redirect to custom onboarding
+        router.push('/onboarding')
+    }, [router])
+
+    return null
 }
