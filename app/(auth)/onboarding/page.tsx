@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useSignUp, useSignIn } from '@clerk/nextjs'
+import { useSignUp, useSignIn, useUser } from '@clerk/nextjs'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +17,7 @@ function OnboardingContent() {
   const searchParams = useSearchParams()
   const { isLoaded: signUpLoaded, signUp, setActive: setActiveSignUp } = useSignUp()
   const { isLoaded: signInLoaded, signIn, setActive: setActiveSignIn } = useSignIn()
+  const { user } = useUser()
   const [authMode, setAuthMode] = useState<AuthMode>('signup')
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -147,16 +148,19 @@ function OnboardingContent() {
     setLoading(true)
 
     try {
-      // Update user metadata with recruiter type
-      await signUp?.update({
-        unsafeMetadata: {
-          recruiterType: type
-        }
-      })
-
-      // Redirect to dashboard
-      toast.success('Profile setup complete!')
-      router.push('/dashboard')
+      // Update user metadata with recruiter type using the user object
+      if (user) {
+        await user.update({
+          unsafeMetadata: {
+            recruiterType: type
+          }
+        })
+        
+        toast.success('Profile setup complete!')
+        router.push('/dashboard')
+      } else {
+        throw new Error('User not authenticated')
+      }
     } catch (err: any) {
       console.error('Error saving profile:', err)
       toast.error('Failed to save profile information')
