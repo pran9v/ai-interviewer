@@ -232,16 +232,22 @@ function OnboardingContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-6xl">
+    <div className="min-h-screen flex items-center justify-center p-4" style={{
+      background: 'linear-gradient(180deg, #E7E9FF 0%, #F3F5FF 100%)'
+    }}>
+      <div className="w-full max-w-[938px]">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-3xl shadow-2xl overflow-hidden"
+          className="bg-white rounded-[50px] overflow-hidden"
+          style={{
+            border: '1px solid rgba(74, 58, 255, 0.5)',
+            boxShadow: '0px 108px 43px rgba(63, 79, 225, 0.01), 0px 61px 36px rgba(63, 79, 225, 0.05), 0px 27px 27px rgba(63, 79, 225, 0.09), 0px 7px 15px rgba(63, 79, 225, 0.1)'
+          }}
         >
           <div className="flex flex-col lg:flex-row">
             {/* Left Panel - Branding */}
-            <div className="lg:w-1/2 bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-600 p-12 text-white relative overflow-hidden">
+            <div className="lg:w-1/2 p-12 text-white relative overflow-hidden" style={{ background: '#4A3AFF', borderRadius: '38px' }}>
               <div className="relative z-10">
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
