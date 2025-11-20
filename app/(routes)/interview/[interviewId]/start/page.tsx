@@ -921,6 +921,43 @@ Topical boundaries:
 COMPLETION:
 When all questions are done, say exactly: "Thank you for your time today. This concludes our interview."`}
                         />
+                        
+                        {/* End Interview Button - Show after user starts answering or on last question */}
+                        {progress.current > 0 && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="mt-8 flex flex-col items-center gap-4"
+                            >
+                                {/* Progress Indicator */}
+                                <div className="w-full bg-white rounded-xl p-6 shadow-sm">
+                                    <div className="flex justify-between text-sm text-gray-600 mb-2">
+                                        <span>Interview Progress</span>
+                                        <span>{`Question ${progress.current} of ${progress.total}`}</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-2">
+                                        <div
+                                            className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500"
+                                            style={{ width: `${progress.percentage}%` }}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* End Interview Button */}
+                                <Button 
+                                    onClick={endInterview}
+                                    disabled={loading || isStopping}
+                                    size="lg"
+                                    variant="destructive"
+                                    className="px-8 py-3"
+                                >
+                                    {loading || isStopping ? 'Ending Interview...' : 'End Interview'}
+                                </Button>
+                                <p className="text-sm text-gray-500 text-center">
+                                    Click to end the interview and view your results
+                                </p>
+                            </motion.div>
+                        )}
                     </motion.div>
                 )}
 
