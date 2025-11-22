@@ -54,7 +54,7 @@ export class RealtimeWebRTC {
       // Step 3: Set up audio element for remote audio playback
       this.audioElement = document.createElement('audio');
       this.audioElement.autoplay = true;
-      this.audioElement.playsInline = true;
+      this.audioElement.setAttribute('playsinline', 'true');
       this.audioElement.muted = false;
       this.audioElement.style.display = 'none';
       document.body.appendChild(this.audioElement);
