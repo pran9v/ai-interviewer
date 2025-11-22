@@ -54,12 +54,22 @@ export class RealtimeWebRTC {
       // Step 3: Set up audio element for remote audio playback
       this.audioElement = document.createElement('audio');
       this.audioElement.autoplay = true;
+      this.audioElement.playsInline = true;
+      this.audioElement.muted = false;
+      this.audioElement.style.display = 'none';
+      document.body.appendChild(this.audioElement);
 
       // Handle incoming audio tracks from OpenAI
       this.peerConnection.ontrack = (event) => {
         console.log('RealtimeWebRTC: Received remote audio track');
         if (this.audioElement) {
           this.audioElement.srcObject = event.streams[0];
+          const playPromise = this.audioElement.play();
+          if (playPromise) {
+            playPromise.catch(err => {
+              console.warn('RealtimeWebRTC: Unable to autoplay remote audio', err);
+            });
+          }
         }
         this.config.onAudioTrack?.(event.track);
         this.config.onRemoteStream?.(event.streams[0]);
@@ -181,6 +191,9 @@ export class RealtimeWebRTC {
 
     if (this.audioElement) {
       this.audioElement.srcObject = null;
+      if (this.audioElement.isConnected) {
+        this.audioElement.remove();
+      }
       this.audioElement = null;
     }
 

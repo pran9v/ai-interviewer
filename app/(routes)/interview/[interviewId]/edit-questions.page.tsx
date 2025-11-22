@@ -195,7 +195,7 @@ function EditQuestionsPage() {
           </Button>
           {/* Proceed to Start Interview; require saving first to ensure edits are persisted */}
           <Button
-            onClick={() => router.push(`/interview/${id}`)}
+            onClick={() => router.push(`/interview/${id}/start`)}
             disabled={hasChanges || saving}
             variant="outline"
           >

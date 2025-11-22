@@ -14,6 +14,7 @@ interface RealtimeVoiceProps {
   hideBranding?: boolean;
   showSpeakingIndicators?: boolean;
   userName?: string;
+  isMicEnabled?: boolean;
 }
 
 export interface RealtimeVoiceHandle {
@@ -28,6 +29,7 @@ export const RealtimeVoice = forwardRef<RealtimeVoiceHandle, RealtimeVoiceProps>
   hideBranding = false,
   showSpeakingIndicators = false,
   userName,
+  isMicEnabled = true,
 }, ref) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -36,6 +38,7 @@ export const RealtimeVoice = forwardRef<RealtimeVoiceHandle, RealtimeVoiceProps>
   const [transcripts, setTranscripts] = useState<Array<{ text: string; role: 'user' | 'assistant' }>>([]);
   
   const clientRef = useRef<RealtimeWebRTC | null>(null);
+  const hasAutoConnectedRef = useRef(false);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
 
@@ -50,8 +53,18 @@ export const RealtimeVoice = forwardRef<RealtimeVoiceHandle, RealtimeVoiceProps>
   const [userLevel, setUserLevel] = useState(0);
   const [assistantLevel, setAssistantLevel] = useState(0);
 
+  // Handle Mic Enable/Disable
   useEffect(() => {
-    if (autoConnect) {
+    if (localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach(track => {
+        track.enabled = isMicEnabled;
+      });
+    }
+  }, [isMicEnabled]);
+
+  useEffect(() => {
+    if (autoConnect && !hasAutoConnectedRef.current) {
+      hasAutoConnectedRef.current = true;
       handleConnect();
     }
 
@@ -68,7 +81,7 @@ export const RealtimeVoice = forwardRef<RealtimeVoiceHandle, RealtimeVoiceProps>
       }
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, []);
+  }, [autoConnect]);
 
   const handleConnect = async () => {
     try {
@@ -124,6 +137,7 @@ export const RealtimeVoice = forwardRef<RealtimeVoiceHandle, RealtimeVoiceProps>
       clientRef.current.disconnect();
       clientRef.current = null;
     }
+    hasAutoConnectedRef.current = false;
     setIsConnected(false);
     setTranscripts([]);
     if (audioCtxRef.current) {

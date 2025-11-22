@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
-import { Building2, Users, Check, Loader2, Upload } from 'lucide-react'
+import { Building2, Users, Check, Loader2, User, Lock, Upload, ArrowRight } from 'lucide-react'
 
 type RecruiterType = 'recruitment-team' | 'recruitment-agency' | null
 type AuthMode = 'signup' | 'signin'
@@ -40,7 +40,7 @@ function OnboardingContent() {
   const [verificationCode, setVerificationCode] = useState('')
   const [pendingVerification, setPendingVerification] = useState(false)
   
-  // University data (new fields)
+  // University data
   const [universityWebsite, setUniversityWebsite] = useState('')
   const [universityName, setUniversityName] = useState('')
   const [universityLogo, setUniversityLogo] = useState('')
@@ -65,17 +65,10 @@ function OnboardingContent() {
   // Sign In handler
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
-    
     if (!signInLoaded) return
-
     setLoading(true)
-
     try {
-      const result = await signIn?.create({
-        identifier: email,
-        password,
-      })
-
+      const result = await signIn?.create({ identifier: email, password })
       if (result?.status === 'complete') {
         await setActiveSignIn({ session: result.createdSessionId })
         router.push('/dashboard')
@@ -91,26 +84,15 @@ function OnboardingContent() {
   // Sign Up handler
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
-    
     if (!signUpLoaded) return
-    
     if (!agreeToTerms) {
       toast.error('Please agree to the terms & privacy policy')
       return
     }
-
     setLoading(true)
-
     try {
-      // Create sign up with required fields only
-      await signUp?.create({
-        emailAddress: email,
-        password,
-      })
-
-      // Send email verification code
+      await signUp?.create({ emailAddress: email, password })
       await signUp?.prepareEmailAddressVerification({ strategy: 'email_code' })
-
       setPendingVerification(true)
       toast.success('Verification code sent to your email!')
     } catch (err: any) {
@@ -124,34 +106,17 @@ function OnboardingContent() {
   // Email verification handler
   const handleVerifyEmail = async (e: React.FormEvent) => {
     e.preventDefault()
-    
     if (!signUpLoaded) return
-
     setLoading(true)
-
     try {
-      const completeSignUp = await signUp?.attemptEmailAddressVerification({
-        code: verificationCode,
-      })
-
+      const completeSignUp = await signUp?.attemptEmailAddressVerification({ code: verificationCode })
       if (completeSignUp?.status === 'complete') {
-        // Set the active session immediately after verification
         await setActiveSignUp({ session: completeSignUp.createdSessionId })
-        
-        // Update user profile with name if provided
         if (firstName || lastName) {
           try {
-            await completeSignUp.update({
-              firstName: firstName || undefined,
-              lastName: lastName || undefined,
-            })
-          } catch (updateErr) {
-            console.error('Error updating name:', updateErr)
-            // Continue anyway - name update is optional
-          }
+            await completeSignUp.update({ firstName: firstName || undefined, lastName: lastName || undefined })
+          } catch (updateErr) { console.error('Error updating name:', updateErr) }
         }
-        
-        // Move to recruiter type selection
         setStep(2)
         setPendingVerification(false)
         toast.success('Email verified! Please select your role.')
@@ -167,7 +132,7 @@ function OnboardingContent() {
   // Recruiter type selection handler
   const handleRecruiterTypeSelection = (type: RecruiterType) => {
     setRecruiterType(type)
-    setStep(3) // Move to university website step
+    setStep(3)
     toast.success('Great! Now let\'s set up your university details.')
   }
 
@@ -177,7 +142,7 @@ function OnboardingContent() {
       toast.error('Please enter a valid website URL')
       return
     }
-    setStep(4) // Move to university details step
+    setStep(4)
   }
 
   // Final university details submission handler
@@ -186,11 +151,8 @@ function OnboardingContent() {
       toast.error('Please enter your university name')
       return
     }
-
     setLoading(true)
-
     try {
-      // Update user metadata with all information
       if (user) {
         await user.update({
           unsafeMetadata: {
@@ -201,7 +163,6 @@ function OnboardingContent() {
             universityAbout
           }
         })
-        
         toast.success('Profile setup complete!')
         router.push('/dashboard')
       } else {
@@ -218,7 +179,6 @@ function OnboardingContent() {
   // Google OAuth handler
   const handleGoogleSignIn = async () => {
     if (!signUpLoaded) return
-
     try {
       await signUp?.authenticateWithRedirect({
         strategy: 'oauth_google',
@@ -231,574 +191,484 @@ function OnboardingContent() {
     }
   }
 
+  // Visual Step Logic
+  // Step 1: Auth (step 1)
+  // Step 2: Recruiter Type (step 2)
+  // Step 3: University Info (step 3 & 4)
+  const visualStep = step === 1 ? 1 : step === 2 ? 2 : 3
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{
-      background: 'linear-gradient(180deg, #E7E9FF 0%, #F3F5FF 100%)'
+    <div className="min-h-screen flex items-center justify-center p-4 lg:p-8" style={{
+      background: 'linear-gradient(135deg, #99C2FF 0%, #ffffff 50%, #99C2FF 100%)'
     }}>
-      <div className="w-full max-w-[938px]">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-[50px] overflow-hidden"
-          style={{
-            border: '1px solid rgba(74, 58, 255, 0.5)',
-            boxShadow: '0px 108px 43px rgba(63, 79, 225, 0.01), 0px 61px 36px rgba(63, 79, 225, 0.05), 0px 27px 27px rgba(63, 79, 225, 0.09), 0px 7px 15px rgba(63, 79, 225, 0.1)'
-          }}
-        >
-          <div className="flex flex-col lg:flex-row">
-            {/* Left Panel - Branding */}
-            <div className="lg:w-1/2 p-12 text-white relative overflow-hidden" style={{ background: '#4A3AFF', borderRadius: '38px' }}>
-              <div className="relative z-10">
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.2 }}
-                  className="mb-8"
-                >
-                  <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full text-sm mb-8">
-                    <span className="animate-pulse">✨</span>
-                    Join us to Interview
-                  </div>
-                  
-                  <h1 className="text-5xl font-bold mb-6 leading-tight">
-                    Start your Journey
-                  </h1>
-                  
-                  <p className="text-xl text-white/90 mb-12">
-                    Follow these simple steps to set up your account
-                  </p>
-                </motion.div>
-
-                {/* Steps Indicator */}
-                <div className="space-y-6">
-                  {[
-                    { num: 1, title: 'Register your', subtitle: 'account' },
-                    { num: 2, title: 'Set up your profile', subtitle: 'information' },
-                    { num: 3, title: 'Add university', subtitle: 'website' },
-                    { num: 4, title: 'Complete university', subtitle: 'details' }
-                  ].map((item, idx) => (
-                    <motion.div
-                      key={item.num}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.3 + idx * 0.1 }}
-                      className={`flex items-start gap-4 p-4 rounded-xl transition-all ${
-                        step >= item.num 
-                          ? 'bg-white/20 backdrop-blur-sm' 
-                          : 'bg-white/5'
-                      }`}
-                    >
-                      <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                        step > item.num
-                          ? 'bg-green-400 text-green-900'
-                          : step === item.num
-                          ? 'bg-white text-indigo-600'
-                          : 'bg-white/20 text-white/60'
-                      }`}>
-                        {step > item.num ? <Check className="w-5 h-5" /> : item.num}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-lg">{item.title}</p>
-                        <p className="text-white/80 text-sm">{item.subtitle}</p>
-                      </div>
-                    </motion.div>
-                  ))}
+      <div className="w-full max-w-[900px] bg-white rounded-[30px] shadow-2xl overflow-hidden flex flex-col lg:flex-row min-h-[600px]">
+        
+        {/* Left Panel */}
+        <div className="hidden lg:flex lg:w-[50%] bg-white p-3 flex-col">
+          <div className="flex-1 rounded-[24px] p-8 text-white relative flex flex-col justify-end gap-8 overflow-hidden" 
+            style={{ 
+              background: 'radial-gradient(70% 70% at 50% 30%, #85C8FF 0%, #1E90FF 100%)' 
+            }}>
+            <div className="relative z-10">
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.2 }}
+              >
+                <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-4 py-2 rounded-full text-sm font-medium mb-6">
+                  <span className="animate-pulse">✨</span>
+                  Join us to Interview
                 </div>
-              </div>
-
-              {/* Decorative circles */}
-              <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32 blur-3xl" />
-              <div className="absolute bottom-0 left-0 w-96 h-96 bg-purple-400/20 rounded-full translate-y-48 -translate-x-48 blur-3xl" />
+                
+                <h1 className="text-4xl font-bold mb-6 leading-tight">
+                  Start your Journey
+                </h1>
+                
+                <p className="text-lg text-white/90 leading-relaxed">
+                  Follow these simple steps to set up your account.
+                </p>
+              </motion.div>
             </div>
 
-            {/* Right Panel - Form Content */}
-            <div className="lg:w-1/2 p-12">
-              <AnimatePresence mode="wait">
-                {step === 1 && !pendingVerification && (
-                  <motion.div
-                    key="step1"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                  >
-                    <h2 className="text-3xl font-bold text-gray-900 mb-2">
-                      {authMode === 'signup' ? 'Get Started Now' : 'Welcome Back'}
-                    </h2>
-                    <p className="text-gray-500 mb-8">
-                      {authMode === 'signup' ? 'Create your account to begin' : 'Sign in to your account'}
-                    </p>
+            {/* Steps Indicator */}
+            <div className="flex gap-3 relative z-10 w-full">
+              {[
+                { num: 1, title: 'Register your account' },
+                { num: 2, title: 'Set up your profile Information' },
+                { num: 3, title: 'Verify your Identity' }
+              ].map((item) => (
+                <div
+                  key={item.num}
+                  className={`flex flex-col justify-between p-3 rounded-2xl transition-all flex-1 aspect-square ${
+                    visualStep === item.num 
+                      ? 'bg-white text-gray-900' 
+                      : 'bg-white/10 border border-white/20 text-white'
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                    visualStep === item.num
+                      ? 'bg-[#1E90FF] text-white'
+                      : 'border border-white/40 text-white'
+                  }`}>
+                    {item.num}
+                  </div>
+                  <span className="font-semibold text-[13px] leading-tight mt-1">
+                    {item.title}
+                  </span>
+                </div>
+              ))}
+            </div>
 
-                    {/* Google Sign In */}
-                    <Button
-                      variant="outline"
-                      className="w-full mb-6 py-6 border-2 hover:bg-gray-50"
-                      onClick={handleGoogleSignIn}
-                      type="button"
-                    >
-                      <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
+            {/* Decorative blobs */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32 blur-3xl" />
+            <div className="absolute bottom-0 left-0 w-96 h-96 bg-indigo-500/30 rounded-full translate-y-48 -translate-x-48 blur-3xl" />
+          </div>
+        </div>
+
+        {/* Right Panel */}
+        <div className="w-full lg:w-[50%] p-6 lg:p-8 flex flex-col justify-center relative">
+          <AnimatePresence mode="wait">
+            {/* Step 1: Sign Up / Sign In */}
+            {step === 1 && !pendingVerification && (
+              <motion.div
+                key="step1"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="max-w-md mx-auto w-full"
+              >
+                <h2 className="text-[32px] font-bold text-gray-900 mb-6">
+                  {authMode === 'signup' ? 'Get Started Now' : 'Welcome Back'}
+                </h2>
+                
+                {/* Google Sign In */}
+                <div className="mb-6">
+                  <Button
+                    variant="outline"
+                    className="w-full h-12 rounded-full border-gray-200 hover:bg-gray-50 text-gray-700 font-medium text-sm relative"
+                    onClick={handleGoogleSignIn}
+                    type="button"
+                  >
+                    <div className="absolute left-6 flex items-center justify-center">
+                      <svg className="w-5 h-5" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                         <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                         <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                         <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                       </svg>
-                      Continue with Google
-                    </Button>
+                    </div>
+                    Log in with Google
+                  </Button>
+                </div>
 
-                    <div className="relative mb-6">
-                      <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-gray-200"></div>
-                      </div>
-                      <div className="relative flex justify-center text-sm">
-                        <span className="px-4 bg-white text-gray-500">or</span>
+                <div className="relative mb-6">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-200"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-4 bg-white text-gray-500 font-medium">or</span>
+                  </div>
+                </div>
+
+                {authMode === 'signup' ? (
+                  <form onSubmit={handleSignUp} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <Input
+                        placeholder="First name"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        required
+                        className="h-12 bg-[#F7F7F7] border-gray-200 rounded-xl focus-visible:ring-blue-500 text-sm px-4"
+                      />
+                      <Input
+                        placeholder="Last name"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        required
+                        className="h-12 bg-[#F7F7F7] border-gray-200 rounded-xl focus-visible:ring-blue-500 text-sm px-4"
+                      />
+                    </div>
+
+                    <div className="relative">
+                      <Input
+                        type="email"
+                        placeholder="Email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        className="h-12 pr-10 bg-[#F7F7F7] border-gray-200 rounded-xl focus-visible:ring-blue-500 text-sm px-4"
+                      />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                        <User className="w-4 h-4 text-gray-400" />
                       </div>
                     </div>
 
-                    {/* Sign Up Form */}
-                    {authMode === 'signup' && (
-                      <form onSubmit={handleSignUp} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <Input
-                            placeholder="First name"
-                            value={firstName}
-                            onChange={(e) => setFirstName(e.target.value)}
-                            required
-                            className="py-6"
-                          />
-                          <Input
-                            placeholder="Last name"
-                            value={lastName}
-                            onChange={(e) => setLastName(e.target.value)}
-                            required
-                            className="py-6"
-                          />
-                        </div>
-
-                        <div className="relative">
-                          <Input
-                            type="email"
-                            placeholder="Email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                            className="py-6 pr-10"
-                          />
-                          <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                        </div>
-
-                        <div className="relative">
-                          <Input
-                            type="password"
-                            placeholder="Password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                            className="py-6 pr-10"
-                          />
-                          <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                          </svg>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            id="terms"
-                            checked={agreeToTerms}
-                            onChange={(e) => setAgreeToTerms(e.target.checked)}
-                            className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                          />
-                          <label htmlFor="terms" className="text-sm text-gray-600">
-                            I agree to the Terms & privacy
-                          </label>
-                        </div>
-
-                        <Button
-                          type="submit"
-                          disabled={loading}
-                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-6 text-lg font-semibold rounded-xl"
-                        >
-                          {loading ? (
-                            <>
-                              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                              Creating account...
-                            </>
-                          ) : (
-                            'Sign up'
-                          )}
-                        </Button>
-                      </form>
-                    )}
-
-                    {/* Sign In Form */}
-                    {authMode === 'signin' && (
-                      <form onSubmit={handleSignIn} className="space-y-4">
-                        <div className="relative">
-                          <Input
-                            type="email"
-                            placeholder="Email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                            className="py-6 pr-10"
-                          />
-                          <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                        </div>
-
-                        <div className="relative">
-                          <Input
-                            type="password"
-                            placeholder="Password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                            className="py-6 pr-10"
-                          />
-                          <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                          </svg>
-                        </div>
-
-                        <Button
-                          type="submit"
-                          disabled={loading}
-                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-6 text-lg font-semibold rounded-xl"
-                        >
-                          {loading ? (
-                            <>
-                              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                              Signing in...
-                            </>
-                          ) : (
-                            'Sign in'
-                          )}
-                        </Button>
-                      </form>
-                    )}
-
-                    <p className="text-center text-sm text-gray-600 mt-6">
-                      {authMode === 'signup' ? (
-                        <>
-                          Have a account?{' '}
-                          <button
-                            type="button"
-                            onClick={() => setAuthMode('signin')}
-                            className="text-indigo-600 font-semibold hover:underline"
-                          >
-                            Sign in
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          Don't have an account?{' '}
-                          <button
-                            type="button"
-                            onClick={() => setAuthMode('signup')}
-                            className="text-indigo-600 font-semibold hover:underline"
-                          >
-                            Sign up
-                          </button>
-                        </>
-                      )}
-                    </p>
-                  </motion.div>
-                )}
-
-                {/* Email Verification Step */}
-                {step === 1 && pendingVerification && (
-                  <motion.div
-                    key="verification"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                  >
-                    <h2 className="text-3xl font-bold text-gray-900 mb-2">Verify Your Email</h2>
-                    <p className="text-gray-500 mb-8">
-                      We sent a verification code to <strong>{email}</strong>
-                    </p>
-
-                    <form onSubmit={handleVerifyEmail} className="space-y-4">
-                      <div className="relative">
-                        <Input
-                          type="text"
-                          placeholder="Enter 6-digit code"
-                          value={verificationCode}
-                          onChange={(e) => setVerificationCode(e.target.value)}
-                          required
-                          maxLength={6}
-                          className="py-6 text-center text-2xl tracking-widest"
-                        />
+                    <div className="relative">
+                      <Input
+                        type="password"
+                        placeholder="Password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        className="h-12 pr-10 bg-[#F7F7F7] border-gray-200 rounded-xl focus-visible:ring-blue-500 text-sm px-4"
+                      />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                        <Lock className="w-4 h-4 text-gray-400" />
                       </div>
+                    </div>
 
-                      <Button
-                        type="submit"
-                        disabled={loading || verificationCode.length !== 6}
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-6 text-lg font-semibold rounded-xl"
-                      >
-                        {loading ? (
-                          <>
-                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                            Verifying...
-                          </>
-                        ) : (
-                          'Verify Email'
-                        )}
-                      </Button>
-
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setPendingVerification(false)}
-                        className="w-full"
-                      >
-                        Back
-                      </Button>
-                    </form>
-                  </motion.div>
-                )}
-
-                {step === 2 && (
-                  <motion.div
-                    key="step2"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                  >
-                    <h2 className="text-3xl font-bold text-gray-900 mb-2">What kind of recruiter are you?</h2>
-                    <p className="text-gray-500 mb-8">Select the option that best describes you</p>
-
-                    <div className="space-y-4">
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => handleRecruiterTypeSelection('recruitment-team')}
-                        disabled={loading}
-                        className={`w-full p-6 border-2 rounded-2xl transition-all text-left ${
-                          recruiterType === 'recruitment-team'
-                            ? 'border-indigo-600 bg-indigo-50'
-                            : 'border-gray-200 hover:border-indigo-300 bg-white'
-                        }`}
-                      >
-                        <div className="flex items-start gap-4">
-                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                            recruiterType === 'recruitment-team' 
-                              ? 'bg-indigo-600' 
-                              : 'bg-indigo-100'
-                          }`}>
-                            <Users className={`w-6 h-6 ${
-                              recruiterType === 'recruitment-team' 
-                                ? 'text-white' 
-                                : 'text-indigo-600'
-                            }`} />
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="text-xl font-bold text-gray-900 mb-1">Recruitment team</h3>
-                            <p className="text-gray-500 text-sm">I'm hiring for my company</p>
-                          </div>
-                          {recruiterType === 'recruitment-team' && (
-                            <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center">
-                              <Check className="w-4 h-4 text-white" />
-                            </div>
-                          )}
-                        </div>
-                      </motion.button>
-
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => handleRecruiterTypeSelection('recruitment-agency')}
-                        disabled={loading}
-                        className={`w-full p-6 border-2 rounded-2xl transition-all text-left ${
-                          recruiterType === 'recruitment-agency'
-                            ? 'border-indigo-600 bg-indigo-50'
-                            : 'border-gray-200 hover:border-indigo-300 bg-white'
-                        }`}
-                      >
-                        <div className="flex items-start gap-4">
-                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                            recruiterType === 'recruitment-agency' 
-                              ? 'bg-indigo-600' 
-                              : 'bg-indigo-100'
-                          }`}>
-                            <Building2 className={`w-6 h-6 ${
-                              recruiterType === 'recruitment-agency' 
-                                ? 'text-white' 
-                                : 'text-indigo-600'
-                            }`} />
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="text-xl font-bold text-gray-900 mb-1">Recruitment Agency</h3>
-                            <p className="text-gray-500 text-sm">I'm hiring for another company</p>
-                          </div>
-                          {recruiterType === 'recruitment-agency' && (
-                            <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center">
-                              <Check className="w-4 h-4 text-white" />
-                            </div>
-                          )}
-                        </div>
-                      </motion.button>
+                    <div className="flex items-center gap-2.5 pt-1">
+                      <input
+                        type="checkbox"
+                        id="terms"
+                        checked={agreeToTerms}
+                        onChange={(e) => setAgreeToTerms(e.target.checked)}
+                        className="w-5 h-5 accent-blue-500 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                      />
+                      <label htmlFor="terms" className="text-sm text-gray-500 cursor-pointer select-none">
+                        I agree to the Terms & privacy
+                      </label>
                     </div>
 
                     <Button
-                      onClick={() => setStep(1)}
-                      variant="ghost"
-                      className="w-full mt-6"
+                      type="submit"
+                      disabled={loading}
+                      className="w-full bg-blue-500 hover:bg-blue-600 text-white h-12 text-base font-semibold rounded-xl mt-2 transition-all"
+                    >
+                      {loading ? <Loader2 className="animate-spin" /> : 'Sign up'}
+                    </Button>
+                  </form>
+                ) : (
+                  <form onSubmit={handleSignIn} className="space-y-4">
+                    <div className="relative">
+                      <Input
+                        type="email"
+                        placeholder="Email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        className="h-12 pr-10 bg-[#F7F7F7] border-gray-200 rounded-xl focus-visible:ring-blue-500 text-sm px-4"
+                      />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                        <User className="w-4 h-4 text-gray-400" />
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <Input
+                        type="password"
+                        placeholder="Password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        className="h-12 pr-10 bg-[#F7F7F7] border-gray-200 rounded-xl focus-visible:ring-blue-500 text-sm px-4"
+                      />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                        <Lock className="w-4 h-4 text-gray-400" />
+                      </div>
+                    </div>
+                    <Button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full bg-blue-500 hover:bg-blue-600 text-white h-12 text-base font-semibold rounded-xl mt-2 transition-all"
+                    >
+                      {loading ? <Loader2 className="animate-spin" /> : 'Sign in'}
+                    </Button>
+                  </form>
+                )}
+
+                <div className="text-center mt-8">
+                  {authMode === 'signup' ? (
+                    <p className="text-gray-500 text-sm">
+                      Have an account?{' '}
+                      <button onClick={() => setAuthMode('signin')} className="text-blue-600 font-semibold hover:underline">
+                        Sign in
+                      </button>
+                    </p>
+                  ) : (
+                    <p className="text-gray-500 text-sm">
+                      Don't have an account?{' '}
+                      <button onClick={() => setAuthMode('signup')} className="text-blue-600 font-semibold hover:underline">
+                        Sign up
+                      </button>
+                    </p>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {/* Email Verification */}
+            {step === 1 && pendingVerification && (
+              <motion.div
+                key="verification"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="max-w-md mx-auto w-full"
+              >
+                <h2 className="text-3xl font-bold text-gray-900 mb-2">Verify Your Email</h2>
+                <p className="text-gray-500 mb-8">Enter the code sent to {email}</p>
+                <form onSubmit={handleVerifyEmail} className="space-y-6">
+                  <Input
+                    type="text"
+                    placeholder="000000"
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value)}
+                    maxLength={6}
+                    className="py-6 text-center text-3xl tracking-[1em] bg-[#F7F7F7] border-gray-100 rounded-xl"
+                  />
+                  <Button type="submit" disabled={loading || verificationCode.length !== 6} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-6 text-lg font-semibold rounded-2xl">
+                    {loading ? <Loader2 className="animate-spin" /> : 'Verify Email'}
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={() => setPendingVerification(false)} className="w-full">Back</Button>
+                </form>
+              </motion.div>
+            )}
+
+            {/* Step 2: Recruiter Type */}
+            {step === 2 && (
+              <motion.div
+                key="step2"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="max-w-md mx-auto w-full"
+              >
+                <h2 className="text-3xl font-bold text-gray-900 mb-2">What kind of recruiter are you?</h2>
+                <p className="text-gray-500 mb-8">Select the option that best describes you</p>
+                <div className="space-y-4">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    onClick={() => handleRecruiterTypeSelection('recruitment-team')}
+                    className={`w-full p-6 border rounded-2xl text-left transition-all ${
+                      recruiterType === 'recruitment-team' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                        recruiterType === 'recruitment-team' ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-600'
+                      }`}>
+                        <Users className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-gray-900">Recruitment team</h3>
+                        <p className="text-gray-500 text-sm">I'm hiring for my company</p>
+                      </div>
+                    </div>
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    onClick={() => handleRecruiterTypeSelection('recruitment-agency')}
+                    className={`w-full p-6 border rounded-2xl text-left transition-all ${
+                      recruiterType === 'recruitment-agency' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                        recruiterType === 'recruitment-agency' ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-600'
+                      }`}>
+                        <Building2 className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-gray-900">Recruitment Agency</h3>
+                        <p className="text-gray-500 text-sm">I'm hiring for another company</p>
+                      </div>
+                    </div>
+                  </motion.button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Step 3: University Website */}
+            {step === 3 && (
+              <motion.div
+                key="step3"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="max-w-md mx-auto w-full h-full flex flex-col pt-10"
+              >
+                <div className="flex-1 flex flex-col justify-start">
+                  <h2 className="text-[32px] font-bold text-gray-900 mb-8">University website</h2>
+                  
+                  <div className="space-y-2">
+                    <div className="relative flex items-center border border-blue-200 rounded-full overflow-hidden bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all h-14">
+                      <div className="h-full px-6 bg-slate-50 border-r border-blue-100 text-gray-900 font-medium flex items-center select-none text-base">
+                        https://
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Enter the University website url"
+                        value={universityWebsite}
+                        onChange={handleWebsiteChange}
+                        className="flex-1 bg-transparent border-none focus:ring-0 px-5 h-full text-gray-900 placeholder:text-gray-400 outline-none w-full text-base"
+                      />
+                      <AnimatePresence>
+                        {websiteValid && (
+                          <motion.div
+                            initial={{ scale: 0, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0, opacity: 0 }}
+                            className="mr-4 bg-green-500 rounded-full p-1"
+                          >
+                            <Check className="w-4 h-4 text-white" strokeWidth={3} />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                    {universityWebsite && !websiteValid && (
+                      <p className="text-red-500 text-xs ml-2">Please enter a valid URL</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4 pb-2">
+                  <Button
+                    onClick={() => setStep(2)}
+                    variant="outline"
+                    className="flex-1 h-12 rounded-full text-sm font-semibold border-gray-200 hover:bg-gray-50"
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    onClick={handleUniversityWebsite}
+                    disabled={!websiteValid}
+                    className="flex-1 bg-blue-500 hover:bg-blue-600 text-white h-12 rounded-full text-sm font-semibold"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Step 4: University Details */}
+            {step === 4 && (
+              <motion.div
+                key="step4"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="max-w-md mx-auto w-full"
+              >
+                <h2 className="text-3xl font-bold text-gray-900 mb-2">University Details</h2>
+                <p className="text-gray-500 mb-8">Tell us more about your university</p>
+
+                <div className="space-y-6">
+                  {/* Logo Upload */}
+                  <div className="border border-gray-200 rounded-2xl p-3 flex flex-col sm:flex-row sm:items-center justify-between bg-white gap-4 sm:gap-0">
+                    <div className="flex items-center gap-3">
+                      {universityLogo ? (
+                        <img src={universityLogo} alt="Logo" className="w-10 h-10 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                          <Building2 className="w-5 h-5 text-blue-600" />
+                        </div>
+                      )}
+                      <span className="text-gray-700 font-medium">University Logo</span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      className="text-blue-600 border-blue-200 hover:bg-blue-50 rounded-xl px-4 h-10"
+                      onClick={() => {
+                        const input = document.createElement('input')
+                        input.type = 'file'
+                        input.accept = 'image/*'
+                        input.onchange = (e: any) => {
+                          const file = e.target?.files?.[0]
+                          if (file) {
+                            const reader = new FileReader()
+                            reader.onloadend = () => setUniversityLogo(reader.result as string)
+                            reader.readAsDataURL(file)
+                          }
+                        }
+                        input.click()
+                      }}
+                    >
+                      Upload <Upload className="w-4 h-4 ml-2" />
+                    </Button>
+                  </div>
+
+                  {/* Name */}
+                  <div className="relative">
+                    <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-600" />
+                    <Input
+                      type="text"
+                      placeholder="University name*"
+                      value={universityName}
+                      onChange={(e) => setUniversityName(e.target.value)}
+                      className="pl-12 py-6 bg-white border-gray-200 rounded-2xl focus-visible:ring-blue-500 text-base"
+                    />
+                  </div>
+
+                  {/* About */}
+                  <textarea
+                    placeholder="About your University"
+                    value={universityAbout}
+                    onChange={(e) => setUniversityAbout(e.target.value)}
+                    rows={5}
+                    className="w-full border border-gray-200 rounded-2xl p-4 text-base resize-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none text-gray-900 placeholder:text-gray-400"
+                  />
+
+                  <div className="flex gap-4 pt-2">
+                    <Button
+                      onClick={() => setStep(3)}
+                      variant="outline"
+                      className="flex-1 py-6 rounded-2xl text-base font-semibold border-gray-200"
                     >
                       Back
                     </Button>
-                  </motion.div>
-                )}
-
-                {step === 3 && (
-                  <motion.div
-                    key="step3"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                  >
-                    <h2 className="text-3xl font-bold text-gray-900 mb-2">University website</h2>
-                    <p className="text-gray-500 mb-8">Enter your university's website URL</p>
-
-                    <div className="space-y-6">
-                      <div className="relative">
-                        <div className="flex items-center gap-2 border-2 border-gray-200 rounded-xl p-4 focus-within:border-indigo-600 transition-colors bg-gray-50">
-                          <span className="text-gray-600 font-medium text-sm">https://</span>
-                          <Input
-                            type="text"
-                            placeholder="www.dezignplex.com"
-                            value={universityWebsite}
-                            onChange={handleWebsiteChange}
-                            className="flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-2 bg-transparent"
-                          />
-                          {websiteValid && universityWebsite && (
-                            <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
-                              <Check className="w-5 h-5 text-white" />
-                            </div>
-                          )}
-                        </div>
-                        {universityWebsite && !websiteValid && (
-                          <p className="text-red-500 text-sm mt-2">Please enter a valid domain (e.g., example.com)</p>
-                        )}
-                      </div>
-
-                      <Button
-                        onClick={handleUniversityWebsite}
-                        disabled={!websiteValid || loading}
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-6 text-lg font-semibold rounded-xl"
-                      >
-                        Next
-                      </Button>
-
-                      <Button
-                        onClick={() => setStep(2)}
-                        variant="ghost"
-                        className="w-full"
-                      >
-                        Back
-                      </Button>
-                    </div>
-                  </motion.div>
-                )}
-
-                {step === 4 && (
-                  <motion.div
-                    key="step4"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                  >
-                    <h2 className="text-3xl font-bold text-gray-900 mb-2">University website</h2>
-                    <p className="text-gray-500 mb-8">Tell us more about your university</p>
-
-                    <div className="space-y-6">
-                      <div className="relative">
-                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-600">
-                          <Building2 className="w-5 h-5" />
-                        </div>
-                        <Input
-                          type="text"
-                          placeholder="University name*"
-                          value={universityName}
-                          onChange={(e) => setUniversityName(e.target.value)}
-                          className="w-full border-2 border-gray-200 rounded-xl p-4 pl-12 text-base focus:border-indigo-600"
-                        />
-                      </div>
-
-                      <div className="border-2 border-gray-200 rounded-xl p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
-                            <Building2 className="w-5 h-5 text-indigo-600" />
-                          </div>
-                          <span className="text-gray-700">University Logo</span>
-                          <Button
-                            variant="outline"
-                            className="ml-auto text-indigo-600 border-indigo-600"
-                            onClick={() => {
-                              // File upload logic here
-                              const input = document.createElement('input')
-                              input.type = 'file'
-                              input.accept = 'image/*'
-                              input.onchange = (e: any) => {
-                                const file = e.target?.files?.[0]
-                                if (file) {
-                                  // Handle file upload
-                                  const reader = new FileReader()
-                                  reader.onloadend = () => {
-                                    setUniversityLogo(reader.result as string)
-                                  }
-                                  reader.readAsDataURL(file)
-                                }
-                              }
-                              input.click()
-                            }}
-                          >
-                            Upload ↑
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div>
-                        <textarea
-                          placeholder="About your University"
-                          value={universityAbout}
-                          onChange={(e) => setUniversityAbout(e.target.value)}
-                          rows={6}
-                          className="w-full border-2 border-gray-200 rounded-xl p-4 text-base resize-none focus:border-indigo-600 focus:outline-none transition-colors"
-                        />
-                      </div>
-
-                      <Button
-                        onClick={handleUniversityDetails}
-                        disabled={!universityName || loading}
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-6 text-lg font-semibold rounded-xl"
-                      >
-                        {loading ? (
-                          <>
-                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                            Setting up...
-                          </>
-                        ) : (
-                          'Next'
-                        )}
-                      </Button>
-
-                      <Button
-                        onClick={() => setStep(3)}
-                        variant="ghost"
-                        className="w-full"
-                      >
-                        Back
-                      </Button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-        </motion.div>
+                    <Button
+                      onClick={handleUniversityDetails}
+                      disabled={!universityName || loading}
+                      className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-6 rounded-2xl text-base font-semibold"
+                    >
+                      {loading ? <Loader2 className="animate-spin" /> : 'Next'}
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   )
@@ -807,11 +677,8 @@ function OnboardingContent() {
 export default function OnboardingPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mx-auto mb-4" />
-          <p className="text-lg text-gray-600">Loading...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
       </div>
     }>
       <OnboardingContent />

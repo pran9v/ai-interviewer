@@ -23,7 +23,7 @@ function Interview() {
                         The interview will last 30 minutes. Are you ready to begin?
                     </p>
                     <Link href={'/interview/' + interviewId + '/start'}>
-                        <Button>Start Interview <ArrowRight /></Button>
+                        <Button className="w-full">Start Interview <ArrowRight className="w-4 h-4 ml-2" /></Button>
                     </Link>
 
                     <hr />
