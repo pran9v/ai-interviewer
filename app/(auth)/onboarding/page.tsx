@@ -235,7 +235,7 @@ function OnboardingContent() {
               {[
                 { num: 1, title: 'Register your account' },
                 { num: 2, title: 'Set up your profile Information' },
-                { num: 3, title: 'Verify your Identity' }
+                { num: 3, title: 'Enter Details' }
               ].map((item) => (
                 <div
                   key={item.num}
@@ -490,8 +490,8 @@ function OnboardingContent() {
                         <Users className="w-6 h-6" />
                       </div>
                       <div>
-                        <h3 className="text-xl font-bold text-gray-900">Recruitment team</h3>
-                        <p className="text-gray-500 text-sm">I'm hiring for my company</p>
+                        <h3 className="text-xl font-bold text-gray-900">University Recruiter</h3>
+                        <p className="text-gray-500 text-sm">I am recruiting for my university</p>
                       </div>
                     </div>
                   </motion.button>
@@ -510,7 +510,7 @@ function OnboardingContent() {
                       </div>
                       <div>
                         <h3 className="text-xl font-bold text-gray-900">Recruitment Agency</h3>
-                        <p className="text-gray-500 text-sm">I'm hiring for another company</p>
+                        <p className="text-gray-500 text-sm">I hire for different universities</p>
                       </div>
                     </div>
                   </motion.button>
