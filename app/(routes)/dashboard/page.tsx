@@ -1,6 +1,6 @@
 "use client"
 
-import { useUser } from '@clerk/nextjs';
+import { useClerk, useUser } from '@clerk/nextjs';
 import { useConvex } from 'convex/react';
 import {
     Bell,
@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import React, { useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { api } from '@/convex/_generated/api';
 import { UserDetailContext } from '@/context/UserDetailContext';
@@ -133,6 +133,7 @@ const getInitials = (name: string) => {
 
 function Dashboard() {
     const { user, isLoaded: isUserLoaded } = useUser();
+    const { signOut } = useClerk();
     const { userDetail } = useContext(UserDetailContext);
     const convex = useConvex();
 
@@ -140,6 +141,14 @@ function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [themeChoice, setThemeChoice] = useState<'light' | 'dark'>('light');
     const isDark = themeChoice === 'dark';
+
+    const handleSignOut = useCallback(async () => {
+        try {
+            await signOut({ redirectUrl: '/' });
+        } catch (error) {
+            console.error('Failed to sign out', error);
+        }
+    }, [signOut]);
 
     useEffect(() => {
         if (typeof document === 'undefined') return;
@@ -340,6 +349,7 @@ function Dashboard() {
                                     ? 'bg-white/5 text-red-300 hover:bg-white/10'
                                     : 'bg-white text-[#1E90FF] border border-[#B5DAFF] shadow-sm hover:bg-[#F1F7FF]',
                             )}
+                            onClick={handleSignOut}
                         >
                             <LogOut className="size-4" />
                             Log out
