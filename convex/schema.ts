@@ -24,6 +24,7 @@ export default defineSchema({
         status: v.string(), // 'draft', 'in_progress', 'completed'
         jobTitle: v.union(v.string(), v.null()),
         jobDescription: v.union(v.string(), v.null()),
+        videoRequired: v.optional(v.boolean()),
         feedback: v.optional(v.any()),
         conversation: v.optional(v.any()), // Conversation history
         currentQuestionIndex: v.optional(v.number()),
