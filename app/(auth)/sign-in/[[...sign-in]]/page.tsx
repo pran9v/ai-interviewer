@@ -8,9 +8,9 @@ function SignInRedirect() {
     const searchParams = useSearchParams()
     
     useEffect(() => {
-        // Redirect to custom onboarding with signin mode
+        // Redirect to custom onboarding with signin mode without extra history entries
         const redirectUrl = searchParams?.get('redirect_url') || '/dashboard'
-        router.push(`/onboarding?mode=signin&redirect_url=${encodeURIComponent(redirectUrl)}`)
+        router.replace(`/onboarding?mode=signin&redirect_url=${encodeURIComponent(redirectUrl)}`)
     }, [router, searchParams])
 
     return null

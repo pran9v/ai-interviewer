@@ -7,8 +7,8 @@ export default function Page() {
     const router = useRouter()
     
     useEffect(() => {
-        // Redirect to custom onboarding
-        router.push('/onboarding')
+        // Redirect to custom onboarding without polluting history stack
+        router.replace('/onboarding')
     }, [router])
 
     return null
