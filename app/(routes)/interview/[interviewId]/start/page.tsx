@@ -26,6 +26,7 @@ export type InterviewData = {
     resumeUrl: string | null,
     status: string | null,
     feedback: FeedbackInfo | null,
+    videoRequired?: boolean | null,
     conversation?: ConversationMessage[],
     currentQuestionIndex?: number,
     startedAt?: number,
@@ -91,6 +92,10 @@ function StartInterview() {
         });
                 // @ts-ignore
         setInterviewData(result);
+
+                if (typeof result?.videoRequired === 'boolean') {
+                    setIsVideoOn(result.videoRequired);
+                }
                 
                 if (user?.firstName) {
                     setCandidateName(user.firstName);
@@ -209,6 +214,10 @@ function StartInterview() {
     };
 
     const toggleVideo = () => {
+        if (interviewData?.videoRequired && isVideoOn) {
+            toast.warning('Video is required for this interview.');
+            return;
+        }
         const newState = !isVideoOn;
         setIsVideoOn(newState);
         

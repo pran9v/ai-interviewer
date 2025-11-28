@@ -8,7 +8,8 @@ export const SaveInterviewQuestion = mutation({
         uid: v.id('UserTable'),
         resumeUrl: v.optional(v.string()),
         jobTitle: v.optional(v.string()),
-        jobDescription: v.optional(v.string())
+        jobDescription: v.optional(v.string()),
+        videoRequired: v.optional(v.boolean()),
 
     },
     handler: async (ctx, args) => {
@@ -18,7 +19,8 @@ export const SaveInterviewQuestion = mutation({
             userId: args.uid,
             status: 'draft',
             jobTitle: args.jobTitle ?? null,
-            jobDescription: args.jobDescription ?? null
+            jobDescription: args.jobDescription ?? null,
+            videoRequired: args.videoRequired ?? undefined
         });
         return result;
     }
