@@ -29,6 +29,17 @@ export default defineSchema({
         conversation: v.optional(v.any()), // Conversation history
         currentQuestionIndex: v.optional(v.number()),
         startedAt: v.optional(v.number()),
-        completedAt: v.optional(v.number())
-    })
+        completedAt: v.optional(v.number()),
+        candidateName: v.optional(v.string())
+    }),
+
+    ShortLinkTable: defineTable({
+        token: v.string(),
+        interviewId: v.id('InterviewSessionTable'),
+        createdAt: v.number(),
+        expiresAt: v.optional(v.number()),
+        maxUses: v.optional(v.number()),
+        useCount: v.number(),
+        meta: v.optional(v.any())
+    }).index("by_token", ["token"])
 })

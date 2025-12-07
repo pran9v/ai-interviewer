@@ -211,8 +211,13 @@ function Dashboard() {
         });
     }, [interviewList]);
 
-    const candidatePreviews = useMemo(() => sortedInterviews.slice(0, 4), [sortedInterviews]);
-    const highlightedInterviews = useMemo(() => sortedInterviews.slice(0, 6), [sortedInterviews]);
+    // Sort interviews to show most recent candidates first; include all for scrollable list
+    const candidatePreviews = useMemo(() => {
+        return [...sortedInterviews].filter((c) => c.candidateName || c.jobTitle);
+    }, [sortedInterviews]);
+
+    // Use the same data for highlights
+    const highlightedInterviews = candidatePreviews;
 
     const activeInterviewCount = useMemo(
         () => interviewList.filter((item) => item.status === 'in_progress').length,
@@ -292,9 +297,9 @@ function Dashboard() {
                                     <div className="flex size-full items-center justify-center">{initials}</div>
                                 )}
                             </div>
-                            <div className="flex flex-col">
-                                <span className={cn('text-sm font-semibold', isDark ? 'text-white' : 'text-gray-900')}>{fullName}</span>
-                                <span className={cn('text-xs', isDark ? 'text-gray-400' : 'text-gray-500')}>Program Coordinator</span>
+                            <div className="flex flex-col min-w-0">
+                                <span className={cn('text-sm font-semibold truncate', isDark ? 'text-white' : 'text-gray-900')}>{fullName}</span>
+                                <span className={cn('text-xs truncate', isDark ? 'text-gray-400' : 'text-gray-500')}>Program Coordinator</span>
                             </div>
                         </div>
                     </div>
@@ -363,9 +368,9 @@ function Dashboard() {
                             <div className="flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-3">
                                     <Image src="/logo.svg" alt="Matryc" width={32} height={32} priority />
-                                    <div className="flex flex-col">
-                                        <span className={cn('text-xs', isDark ? 'text-gray-400' : 'text-gray-500')}>Hello</span>
-                                        <span className={cn('text-base font-semibold', isDark ? 'text-white' : 'text-gray-900')}>
+                                    <div className="flex flex-col min-w-0">
+                                        <span className={cn('text-xs truncate', isDark ? 'text-gray-400' : 'text-gray-500')}>Hello</span>
+                                        <span className={cn('text-base font-semibold truncate', isDark ? 'text-white' : 'text-gray-900')}>
                                             {fullName}
                                         </span>
                                     </div>
@@ -551,24 +556,16 @@ function Dashboard() {
                                         <h3 className={cn('text-lg font-semibold', isDark ? 'text-white' : 'text-gray-900')}>
                                             Latest Candidates
                                         </h3>
-                                        <Button
-                                            variant="ghost"
-                                            className={cn(
-                                                'h-auto px-0 text-sm font-semibold hover:bg-transparent',
-                                                isDark ? 'text-[#A5B4FF]' : 'text-[#1E90FF]',
-                                            )}
-                                        >
-                                            View all
-                                        </Button>
+                                        <div className="h-0 w-0" aria-hidden />
                                     </div>
 
-                                    <div className="mt-6 space-y-4">
+                                    <div className="mt-6 min-h-[320px] max-h-[320px] space-y-4 overflow-y-auto pr-1 snap-y snap-mandatory">
                                         {loading
                                             ? Array.from({ length: 4 }).map((_, index) => (
                                                   <div
                                                       key={`candidate-skeleton-${index}`}
                                                       className={cn(
-                                                          'flex items-center justify-between gap-4 rounded-2xl border p-4 transition-colors duration-300',
+                                                          'flex items-center justify-between gap-4 rounded-2xl border p-4 transition-colors duration-300 snap-start',
                                                           isDark
                                                               ? 'border-white/10 bg-[#1A1A1A]'
                                                               : 'border-[#D7E7FF] bg-[#F3F8FF]',
@@ -582,11 +579,11 @@ function Dashboard() {
                                                   </div>
                                               ))
                                             : candidatePreviews.length > 0
-                                              ? candidatePreviews.map((interview, idx) => (
+                                              ? candidatePreviews.map((candidate) => (
                                                     <div
-                                                        key={String(interview._id)}
+                                                        key={String(candidate._id)}
                                                         className={cn(
-                                                            'flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-4 transition hover:shadow-sm',
+                                                            'flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-4 transition hover:shadow-sm snap-start',
                                                             isDark
                                                                 ? 'border-white/10 bg-[#1A1A1A] hover:shadow-black/20'
                                                                 : 'border-[#D7E7FF] bg-[#F3F8FF]',
@@ -594,13 +591,13 @@ function Dashboard() {
                                                     >
                                                         <div className="min-w-0 flex-1">
                                                             <p className={cn('truncate text-sm font-semibold', isDark ? 'text-gray-100' : 'text-gray-900')}>
-                                                                {interview.jobTitle ?? `Candidate ${idx + 1}`}
+                                                                {candidate.candidateName || 'Guest'}
                                                             </p>
                                                             <p className={cn('mt-1 line-clamp-1 text-xs', isDark ? 'text-gray-400' : 'text-gray-500')}>
-                                                                {interview.jobDescription ?? 'No description provided yet.'}
+                                                                {candidate.jobTitle || 'No role specified'}
                                                             </p>
                                                         </div>
-                                                        <Link href={`/interview/${interview._id}`}>
+                                                        <Link href={`/interview/${candidate._id}`}>
                                                             <Button
                                                                 variant="outline"
                                                                 className={cn(
@@ -648,32 +645,16 @@ function Dashboard() {
                                             Track ongoing and recent interview sessions
                                         </p>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className={cn('hidden text-xs sm:inline', isDark ? 'text-gray-500' : 'text-gray-400')}>
-                                            Last month
-                                        </span>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className={cn(
-                                                'rounded-full border text-gray-500 transition-colors duration-300',
-                                                isDark
-                                                    ? 'border-white/10 bg-white/10 hover:bg-white/20'
-                                                    : 'border-[#D8E9FF] bg-white hover:bg-[#E6F3FF]',
-                                            )}
-                                        >
-                                            <CalendarDays className="size-4" />
-                                        </Button>
-                                    </div>
+                                    <div className="h-0 w-0" aria-hidden />
                                 </div>
 
-                                <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                                <div className="mt-6 flex min-h-[700px] max-h-[760px] flex-col gap-4 overflow-y-auto pr-1 pb-2 snap-y snap-mandatory">
                                     {loading
                                         ? Array.from({ length: 4 }).map((_, index) => (
                                               <div
                                                   key={`interview-skeleton-${index}`}
                                                   className={cn(
-                                                      'rounded-2xl border p-4 transition-colors duration-300',
+                                                      'rounded-2xl border p-4 transition-colors duration-300 snap-start',
                                                       isDark ? 'border-white/10 bg-[#1A1A1A]' : 'border-gray-100 bg-white',
                                                   )}
                                               >
@@ -690,64 +671,64 @@ function Dashboard() {
                                                 <div
                                                     key={String(interview._id)}
                                                     className={cn(
-                                                        'flex flex-col gap-3 rounded-2xl border p-4 transition',
+                                                        'group flex flex-col gap-4 rounded-2xl border p-5 transition hover:shadow-md snap-start',
                                                         isDark
-                                                            ? 'border-white/10 bg-[#1A1A1A] hover:border-white/20 hover:shadow-black/20'
-                                                                : 'border-[#D7E7FF] bg-[#F3F8FF] hover:border-[#BEE3FF] hover:shadow-sm',
+                                                            ? 'border-white/10 bg-[#1A1A1A] hover:border-white/20 hover:shadow-black/30'
+                                                                : 'border-[#D7E7FF] bg-white hover:border-[#BEE3FF]',
                                                     )}
                                                 >
-                                                    <div className="flex items-center justify-between gap-2">
-                                                        <h4 className={cn('line-clamp-2 text-sm font-semibold', isDark ? 'text-gray-100' : 'text-gray-900')}>
-                                                            {interview.jobTitle ?? 'Untitled Interview'}
-                                                        </h4>
-                                                        {interview.status && (
-                                                            <span
-                                                                className={cn(
-                                                                    'inline-flex items-center rounded-full px-3 py-1 text-xs font-medium capitalize',
-                                                                    interview.status === 'completed'
-                                                                        ? isDark
-                                                                            ? 'bg-emerald-500/20 text-emerald-300'
-                                                                            : 'bg-[#DCFCE7] text-[#15803D]'
-                                                                        : interview.status === 'in_progress'
-                                                                            ? isDark
-                                                                                ? 'bg-[#1E90FF]/30 text-[#A5B4FF]'
-                                                                                : 'bg-[#E1F0FF] text-[#1E90FF]'
-                                                                            : isDark
-                                                                                ? 'bg-rose-500/20 text-rose-300'
-                                                                                : 'bg-[#FFE4E6] text-[#BE123C]',
-                                                                )}
-                                                            >
-                                                                {interview.status.replace('_', ' ')}
-                                                            </span>
-                                                        )}
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="mb-1 flex items-center gap-2">
+                                                                <div
+                                                                    className={cn(
+                                                                        'size-2 rounded-full',
+                                                                        interview.status === 'completed'
+                                                                            ? 'bg-emerald-500'
+                                                                            : interview.status === 'in_progress'
+                                                                                ? 'bg-blue-500'
+                                                                                : 'bg-rose-500',
+                                                                    )}
+                                                                />
+                                                                <span className={cn('text-xs font-medium uppercase tracking-wide', isDark ? 'text-gray-400' : 'text-gray-500')}>
+                                                                    {interview.status?.replace('_', ' ') || 'Unknown'}
+                                                                </span>
+                                                            </div>
+                                                            <h4 className={cn('line-clamp-2 text-base font-semibold leading-tight', isDark ? 'text-gray-100' : 'text-gray-900')}>
+                                                                {interview.jobTitle ?? 'Untitled Interview'}
+                                                            </h4>
+                                                        </div>
                                                     </div>
-                                                    <p className={cn('text-xs', isDark ? 'text-gray-400' : 'text-gray-500')}>
-                                                        {interview.jobDescription
-                                                            ? `${interview.jobDescription.slice(0, 80)}${
-                                                                  interview.jobDescription.length > 80 ? '…' : ''
-                                                              }`
-                                                            : 'No description available yet.'}
+
+                                                    <p className={cn('line-clamp-2 text-sm', isDark ? 'text-gray-400' : 'text-gray-600')}>
+                                                        {interview.jobDescription || 'No description provided.'}
                                                     </p>
-                                                    <div className="mt-auto flex items-center justify-between">
-                                                        <Link
-                                                            href={`/interview/${interview._id}`}
-                                                            className={cn(
-                                                                'text-sm font-semibold transition-colors duration-300 hover:underline',
-                                                                isDark ? 'text-[#A5B4FF]' : 'text-[#1E90FF]',
-                                                            )}
-                                                        >
-                                                            Open
-                                                        </Link>
-                                                        <span className={cn('text-xs', isDark ? 'text-gray-500' : 'text-gray-400')}>
+
+                                                    <div className="mt-auto flex items-center justify-between gap-4 pt-2">
+                                                        <span className={cn('text-xs font-medium', isDark ? 'text-gray-500' : 'text-gray-400')}>
                                                             {formatRelativeTime(interview.completedAt ?? interview.startedAt)}
                                                         </span>
+                                                        <Link href={`/interview/${interview._id}`}>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                className={cn(
+                                                                    'h-8 rounded-full px-4 text-xs font-semibold',
+                                                                    isDark
+                                                                        ? 'border-white/20 text-white hover:bg-white/10'
+                                                                        : 'border-[#1E90FF] text-[#1E90FF] hover:bg-[#E6F3FF]',
+                                                                )}
+                                                            >
+                                                                Open
+                                                            </Button>
+                                                        </Link>
                                                     </div>
                                                 </div>
                                             ))
                                           : (
                                               <div
                                                   className={cn(
-                                                      'col-span-full rounded-2xl border border-dashed p-10 text-center text-sm transition-colors duration-300',
+                                                      'rounded-2xl border border-dashed p-10 text-center text-sm transition-colors duration-300 snap-start',
                                                       isDark
                                                           ? 'border-white/20 bg-[#121212] text-gray-400'
                                                       : 'border-[#D7E7FF] bg-[#F3F8FF] text-gray-500',

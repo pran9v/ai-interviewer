@@ -49,7 +49,15 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 - Add to `.env`:
   ```
   OPENAI_API_KEY=your_openai_api_key
+NEXT_PUBLIC_BASE_URL=https://your-domain.com
   ```
+
+### Short interview links
+
+- `POST /api/shorten` with `{ interviewId, expiresInSeconds?, maxUses? }` returns `{ shortUrl, token }`.
+- Public redirect lives at `/l/:token` and forwards to `/interview/:id/start?token=...&autostart=1` when valid.
+- Invalid, expired, or exhausted links redirect to `/link-expired` or `/link-used`.
+- The interview start page auto-validates `token` + `autostart=1` and starts the session when the link is valid.
 
 ### Running the Development Server
 

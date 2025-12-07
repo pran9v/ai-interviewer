@@ -47,9 +47,15 @@ export async function POST(req: NextRequest) {
     // Parse request body
     const body: RealtimeSessionRequest = await req.json().catch(() => ({}));
 
-    // Default configuration for interview sessions
-    const sessionConfig = {
-      model: body.model || 'gpt-4o-realtime-preview-2024-12-17',
+    const preferredModels = [
+      body.model,
+      'gpt-4o-realtime-preview-2024-12-17',
+      'gpt-4o-realtime-preview-2024-10-01',
+      'gpt-4o-realtime-preview'
+    ].filter(Boolean) as string[];
+
+    const buildConfig = (model: string) => ({
+      model,
       voice: body.voice || 'alloy',
       instructions: body.instructions || 
         'You are a professional job interviewer conducting a voice interview. ' +
@@ -64,54 +70,65 @@ export async function POST(req: NextRequest) {
         prefix_padding_ms: 300,
         silence_duration_ms: 500
       }
-    };
-
-    console.log('Creating OpenAI Realtime session with config:', {
-      model: sessionConfig.model,
-      voice: sessionConfig.voice,
-      temperature: sessionConfig.temperature
     });
 
-    // Create ephemeral session token via OpenAI API
-    const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(sessionConfig)
-    });
+    let lastError: { status: number; statusText: string; body?: string; model?: string } | null = null;
+    let sessionData: RealtimeSessionResponse | null = null;
+    let sessionConfig: ReturnType<typeof buildConfig> | null = null;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('OpenAI Realtime session creation failed:', {
-        status: response.status,
-        statusText: response.statusText,
-        body: errorText
+    for (const model of preferredModels) {
+      sessionConfig = buildConfig(model);
+      console.log('Creating OpenAI Realtime session with config:', {
+        model: sessionConfig.model,
+        voice: sessionConfig.voice,
+        temperature: sessionConfig.temperature
       });
 
-      // Handle specific error cases
-      if (response.status === 401) {
-        return NextResponse.json(
-          { error: 'Authentication failed', details: 'Invalid OpenAI API key' },
-          { status: 401 }
-        );
+      const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(sessionConfig)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        lastError = { status: response.status, statusText: response.statusText, body: errorText, model };
+        console.error('OpenAI Realtime session creation failed:', {
+          model,
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText
+        });
+
+        if (response.status === 401) {
+          return NextResponse.json(
+            { error: 'Authentication failed', details: 'Invalid OpenAI API key' },
+            { status: 401 }
+          );
+        }
+        if (response.status === 429) {
+          return NextResponse.json(
+            { error: 'Rate limit exceeded', details: 'Too many requests. Please try again later.' },
+            { status: 429 }
+          );
+        }
+        // Try next model on other errors
+        continue;
       }
 
-      if (response.status === 429) {
-        return NextResponse.json(
-          { error: 'Rate limit exceeded', details: 'Too many requests. Please try again later.' },
-          { status: 429 }
-        );
-      }
-
-      return NextResponse.json(
-        { error: 'Failed to create session', details: errorText },
-        { status: response.status }
-      );
+      sessionData = await response.json();
+      break;
     }
 
-    const sessionData: RealtimeSessionResponse = await response.json();
+    if (!sessionData || !sessionConfig) {
+      return NextResponse.json(
+        { error: 'Failed to create session', details: lastError?.body || lastError?.statusText || 'Unknown error', model: lastError?.model },
+        { status: lastError?.status || 500 }
+      );
+    }
 
     console.log('OpenAI Realtime session created successfully:', {
       expiresAt: new Date(sessionData.client_secret.expires_at * 1000).toISOString(),

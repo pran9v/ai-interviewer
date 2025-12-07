@@ -3,8 +3,8 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import axios from 'axios';
 import { useConvex, useMutation } from 'convex/react';
-import { useParams, useRouter } from 'next/navigation'
-import React, { useEffect, useRef, useState } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Mic, Video, LogOut, Check, ChevronRight, Loader2, Sparkles, MicOff, VideoOff } from 'lucide-react';
@@ -30,7 +30,8 @@ export type InterviewData = {
     conversation?: ConversationMessage[],
     currentQuestionIndex?: number,
     startedAt?: number,
-    completedAt?: number
+    completedAt?: number,
+    candidateName?: string | null
 }
 
 type InterviewQuestions = {
@@ -45,6 +46,7 @@ function StartInterview() {
     const { user } = useUser();
     const convex = useConvex();
     const router = useRouter();
+    const searchParams = useSearchParams();
     
     // State
     const [step, setStep] = useState<Step>('landing');
@@ -55,6 +57,9 @@ function StartInterview() {
     const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
     const [countdown, setCountdown] = useState(3);
     const [isInterviewStarted, setIsInterviewStarted] = useState(false);
+    const [autoStartError, setAutoStartError] = useState<string | null>(null);
+    const [autoStarting, setAutoStarting] = useState(false);
+    const [autoStartValidated, setAutoStartValidated] = useState(false);
     
     // Media Controls State
     const [isMicOn, setIsMicOn] = useState(true);
@@ -76,6 +81,10 @@ function StartInterview() {
     const updateFeedback = useMutation(api.Interview.UpdateFeedback);
     const startInterview = useMutation(api.Interview.StartInterview);
     const updateConversation = useMutation(api.Interview.UpdateConversation);
+    const completeInterview = useMutation(api.Interview.CompleteInterview);
+
+    const tokenParam = searchParams.get('token');
+    const shouldAutoStart = searchParams.get('autostart') === '1';
 
     // Refs
     const realtimeClientRef = useRef<any>(null);
@@ -230,7 +239,31 @@ function StartInterview() {
     };
 
     // Logic: Start Interview Flow
-    const handleStartCountdown = () => {
+    const beginInterview = useCallback(async () => {
+        if (!interviewData?._id) return;
+        try {
+            setCallSeconds(0);
+            setStep('interview');
+            setIsInterviewStarted(true);
+            
+            await startInterview({
+                recordId: interviewData._id,
+                candidateName: candidateName.trim()
+            });
+
+            const firstQuestion = await conversationManager?.askNextQuestion();
+            if (firstQuestion) {
+                setCurrentQuestion(firstQuestion);
+            }
+        } catch (err) {
+            console.error(err);
+            toast.error('Failed to start interview session');
+        }
+    }, [candidateName, conversationManager, interviewData, startInterview]);
+
+    const handleStartCountdown = useCallback(() => {
+        if (isInterviewStarted) return;
+        setCountdown(3);
         setStep('countdown');
         let count = 3; 
         const interval = setInterval(() => {
@@ -240,33 +273,35 @@ function StartInterview() {
                 clearInterval(interval);
                 beginInterview();
             }
-                    }, 1000);
-    };
+        }, 1000);
+    }, [beginInterview, isInterviewStarted]);
 
-    const beginInterview = async () => {
-        try {
-            setCallSeconds(0);
-            setStep('interview');
-            setIsInterviewStarted(true);
-            
-            // DB update
-            await startInterview({
-                recordId: interviewData!._id
-            });
+    useEffect(() => {
+        const maybeValidate = async () => {
+            if (!shouldAutoStart || !tokenParam || autoStartValidated || loading) return;
+            setAutoStartError(null);
+            setAutoStarting(true);
+            try {
+                const response = await axios.get('/api/validate-shortlink', {
+                    params: { token: tokenParam, interviewId },
+                });
 
-            // Get first question to trigger RealtimeVoice
-            const firstQuestion = await conversationManager?.askNextQuestion();
-            if (firstQuestion) {
-                setCurrentQuestion(firstQuestion);
+                if (!response.data?.valid) {
+                    setAutoStartError('This interview link is invalid or expired.');
+                    return;
+                }
+
+                setAutoStartValidated(true);
+            } catch (error) {
+                console.error('Auto start validation failed', error);
+                setAutoStartError('Could not validate the interview link.');
+            } finally {
+                setAutoStarting(false);
             }
-            
-            // Trigger connect on RealtimeVoice if ref exists (it should now mount)
-            // Note: We use autoConnect on the component for simplicity
-        } catch (err) {
-            console.error(err);
-            toast.error('Failed to start interview session');
-        }
-    };
+        };
+
+        maybeValidate();
+    }, [shouldAutoStart, tokenParam, interviewId, loading, autoStartValidated, candidateName]);
 
     useEffect(() => {
         let timer: ReturnType<typeof setInterval> | null = null;
@@ -296,6 +331,9 @@ function StartInterview() {
             }
             
             setStep('completed');
+            if (interviewData?._id) {
+                await completeInterview({ recordId: interviewData._id });
+            }
             
         } catch (err) {
             console.error(err);
@@ -373,9 +411,25 @@ function StartInterview() {
                                     onClick={() => setStep('audio-check')}
                                     disabled={!candidateName.trim()}
                                 >
-                                    Next
+                                    {autoStartValidated ? 'Continue' : 'Next'}
                                 </Button>
                             </div>
+                            
+                            {autoStarting && (
+                                <p className="mt-3 text-xs text-blue-600">
+                                    Validating your interview link...
+                                </p>
+                            )}
+                            {autoStartError && (
+                                <p className="mt-3 text-xs text-red-500">
+                                    {autoStartError}
+                                </p>
+                            )}
+                            {autoStartValidated && !autoStarting && !autoStartError && (
+                                <p className="mt-3 text-xs text-green-600">
+                                    Link validated. You can adjust your name and continue when ready.
+                                </p>
+                            )}
                             
                             <div className="mt-6 flex items-center justify-center gap-2 text-xs text-gray-400">
                                 <div className="w-4 h-4 rounded-full border border-gray-300 flex items-center justify-center">!</div>
