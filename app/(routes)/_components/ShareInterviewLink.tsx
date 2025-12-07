@@ -30,6 +30,9 @@ type ShareInterviewLinkProps = {
 };
 
 const DEFAULT_EXPIRY_SECONDS = 48 * 60 * 60;
+const PRIMARY_BLUE = "#1E90FF";
+const PRIMARY_BLUE_DARK = "#1176D6";
+const PRIMARY_BLUE_LIGHT = "#E6F3FF";
 
 export function ShareInterviewLink({
   interviewId,
@@ -157,14 +160,14 @@ export function ShareInterviewLink({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm">
+          <div className="rounded-2xl border border-[#E0EEFF] bg-[#F7FBFF] px-4 py-3 text-sm">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-gray-600">Short URL</span>
+              <span className="font-semibold text-[#0F3B66]">Short URL</span>
               <Button
                 type="button"
                 size="sm"
                 variant="ghost"
-                className="gap-2"
+                className="gap-2 text-[#1E90FF] hover:bg-[#E6F3FF]"
                 onClick={createLink}
                 disabled={loading}
               >
@@ -172,8 +175,8 @@ export function ShareInterviewLink({
                 Refresh
               </Button>
             </div>
-            <div className="mt-2 flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-gray-900">
-              <span className="flex-1 truncate">
+            <div className="mt-2 flex items-center gap-2 overflow-hidden rounded-xl bg-white px-3 py-2 text-gray-900 shadow-sm ring-1 ring-[#1E90FF]/10">
+              <span className="min-w-0 flex-1 truncate">
                 {shortUrl ?? "Generating link..."}
               </span>
               <Button
@@ -183,13 +186,15 @@ export function ShareInterviewLink({
                 onClick={handleCopy}
                 disabled={!shortUrl}
                 aria-label="Copy link"
+                className="shrink-0 text-[#1E90FF] hover:bg-[#E6F3FF]"
               >
                 <Copy className="h-4 w-4" />
               </Button>
             </div>
             {token && (
-              <p className="mt-2 text-xs text-gray-500">
-                Token: {token} • Expires in 48h • One-time use
+              <p className="mt-2 text-xs text-[#0F3B66]">
+                Token: <span className="font-semibold text-[#1E90FF]">{token}</span> • Expires in 48h •
+                One-time use
               </p>
             )}
           </div>
@@ -197,7 +202,7 @@ export function ShareInterviewLink({
           <div className="flex items-center gap-2">
             <Button
               type="button"
-              className="flex-1"
+              className="flex-1 border border-[#1E90FF] bg-[#1E90FF] text-white shadow-sm transition hover:bg-[#1176D6]"
               onClick={handleShare}
               disabled={!shortUrl}
             >
@@ -207,7 +212,7 @@ export function ShareInterviewLink({
             <Button
               type="button"
               variant="outline"
-              className="flex-1"
+              className="flex-1 border-[#1E90FF] text-[#1E90FF] transition hover:bg-[#E6F3FF]"
               onClick={handleCopy}
               disabled={!shortUrl}
             >
@@ -226,14 +231,19 @@ export function ShareInterviewLink({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
-              <Button type="button" variant="secondary" onClick={handleEmail}>
+              <Button
+                type="button"
+                variant="secondary"
+                className="bg-[#1E90FF] text-white hover:bg-[#1176D6]"
+                onClick={handleEmail}
+              >
                 <Mail className="mr-2 h-4 w-4" />
                 Send
               </Button>
             </div>
           </div>
 
-          <div className="rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          <div className="rounded-xl border border-[#B5DAFF] bg-[#E6F3FF] px-4 py-3 text-sm text-[#0F3B66]">
             The link redirects to the interview start page with auto-start
             enabled. It expires after 48 hours or after the first use.
           </div>
@@ -244,7 +254,11 @@ export function ShareInterviewLink({
             Close
           </Button>
           {onContinue && (
-            <Button type="button" onClick={onContinue}>
+            <Button
+              type="button"
+              className="bg-[#1E90FF] text-white hover:bg-[#1176D6]"
+              onClick={onContinue}
+            >
               {continueLabel}
             </Button>
           )}
