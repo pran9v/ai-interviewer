@@ -15,6 +15,9 @@ function InterviewCard({ interviewInfo }: props) {
                 <Badge >{interviewInfo?.status}</Badge>
             </h2>
             <p className='line-clamp-2 text-gray-500'>{interviewInfo?.resumeUrl ? 'We generated Interview from the uploaded resume.' : interviewInfo.jobDescription}</p>
+            {interviewInfo?.candidateName && (
+                <p className='text-sm text-gray-700 mt-2'>Candidate: {interviewInfo.candidateName}</p>
+            )}
 
             <div className='mt-5 flex justify-between items-center'>
                 {interviewInfo?.feedback && <FeedbackDialog feedbackInfo={interviewInfo.feedback} />}

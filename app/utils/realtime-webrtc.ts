@@ -256,8 +256,15 @@ export class RealtimeWebRTC {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(error.error || 'Failed to create session');
+      const text = await response.text().catch(() => '');
+      let parsed: any = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      const message = parsed?.error || parsed?.details || text || 'Failed to create session';
+      throw new Error(`Realtime session error: ${message}`);
     }
 
     const data = await response.json();

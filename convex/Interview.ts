@@ -56,15 +56,30 @@ export const UpdateFeedback = mutation({
     }
 })
 
-export const StartInterview = mutation({
+export const CompleteInterview = mutation({
     args: {
         recordId: v.id('InterviewSessionTable')
     },
     handler: async (ctx, args) => {
         const result = await ctx.db.patch(args.recordId, {
+            status: 'completed',
+            completedAt: Date.now()
+        });
+        return result;
+    }
+})
+
+export const StartInterview = mutation({
+    args: {
+        recordId: v.id('InterviewSessionTable'),
+        candidateName: v.optional(v.string())
+    },
+    handler: async (ctx, args) => {
+        const result = await ctx.db.patch(args.recordId, {
             status: 'in_progress',
             startedAt: Date.now(),
-            currentQuestionIndex: 0
+            currentQuestionIndex: 0,
+            candidateName: args.candidateName
         });
         return result;
     }
