@@ -108,11 +108,6 @@ function CreateInterviewDialog({
             title: 'Generate interview for University',
             description: 'Create tailored screening questions for academic programs.',
         },
-        {
-            id: 'job',
-            title: 'Generate interview for a Job',
-            description: 'Build role-specific questions for hiring workflows.',
-        },
     ];
 
     const resetFlow = () => {
