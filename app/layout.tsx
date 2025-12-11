@@ -25,7 +25,7 @@ export default function RootLayout({
       signInUrl="/onboarding?mode=signin"
       signUpUrl="/onboarding"
       signInFallbackRedirectUrl="/dashboard"
-      signUpFallbackRedirectUrl="/dashboard"
+      signUpFallbackRedirectUrl="/onboarding?mode=signup"
     >
       <html lang="en" suppressHydrationWarning={true}>
         <body

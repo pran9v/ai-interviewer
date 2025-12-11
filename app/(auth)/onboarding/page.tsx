@@ -22,6 +22,11 @@ function OnboardingContent() {
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  const profileComplete = Boolean(
+    user?.unsafeMetadata?.recruiterType &&
+      user?.unsafeMetadata?.universityName &&
+      user?.unsafeMetadata?.universityWebsite
+  )
 
   // Check URL params for auth mode
   useEffect(() => {
@@ -31,12 +36,19 @@ function OnboardingContent() {
     }
   }, [searchParams])
 
-  // If user already has a session, send them to dashboard
+  // If user already has a session, decide where to go
   useEffect(() => {
-    if (userLoaded && isSignedIn) {
+    if (!userLoaded || !isSignedIn) return
+
+    if (profileComplete) {
       router.replace('/dashboard')
+      return
     }
-  }, [userLoaded, isSignedIn, router])
+
+    // Signed-in users without profile details should continue onboarding
+    setAuthMode('signup')
+    setStep((prev) => (prev < 2 ? 2 : prev))
+  }, [userLoaded, isSignedIn, profileComplete, router])
   
   // Form data
   const [firstName, setFirstName] = useState('')
@@ -206,17 +218,23 @@ function OnboardingContent() {
 
     setGoogleLoading(true)
     try {
+      const dashboardRedirect = '/dashboard'
+      const onboardingRedirect = '/onboarding?mode=signup'
+      const redirectUrl =
+        authMode === 'signin'
+          ? `/sso-callback?redirect_url=${encodeURIComponent(dashboardRedirect)}`
+          : `/sso-callback?redirect_url=${encodeURIComponent(onboardingRedirect)}`
       if (authMode === 'signin') {
         await signIn?.authenticateWithRedirect({
           strategy: 'oauth_google',
-          redirectUrl: '/sso-callback',
-          redirectUrlComplete: '/dashboard',
+          redirectUrl,
+          redirectUrlComplete: dashboardRedirect,
         })
       } else {
         await signUp?.authenticateWithRedirect({
           strategy: 'oauth_google',
-          redirectUrl: '/sso-callback',
-          redirectUrlComplete: '/dashboard',
+          redirectUrl,
+          redirectUrlComplete: onboardingRedirect,
         })
       }
     } catch (err: any) {
@@ -241,7 +259,7 @@ function OnboardingContent() {
     )
   }
 
-  if (isSignedIn) {
+  if (isSignedIn && profileComplete) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
