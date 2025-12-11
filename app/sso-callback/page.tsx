@@ -1,21 +1,12 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { AuthenticateWithRedirectCallback } from '@clerk/nextjs'
 import { Loader2 } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
 
 export default function SSOCallbackPage() {
-  const router = useRouter()
-
-  useEffect(() => {
-    // Clerk handles the OAuth callback automatically
-    // Just redirect to dashboard after a short delay
-    const timer = setTimeout(() => {
-      router.push('/dashboard')
-    }, 2000)
-
-    return () => clearTimeout(timer)
-  }, [router])
+  const searchParams = useSearchParams()
+  const redirectUrl = searchParams?.get('redirect_url') || '/dashboard'
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
@@ -23,6 +14,7 @@ export default function SSOCallbackPage() {
         <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mx-auto mb-4" />
         <p className="text-lg text-gray-600">Completing sign in...</p>
       </div>
+      <AuthenticateWithRedirectCallback redirectUrl={redirectUrl} />
     </div>
   )
 }
