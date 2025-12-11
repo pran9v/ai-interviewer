@@ -7,7 +7,9 @@ import { useSearchParams } from 'next/navigation'
 
 function SSOCallbackInner() {
   const searchParams = useSearchParams()
-  const redirectUrl = searchParams?.get('redirect_url') || '/dashboard'
+  const clerkStatus = searchParams?.get('__clerk_status')
+  const defaultRedirect = clerkStatus === 'sign_up' ? '/onboarding?mode=signup' : '/dashboard'
+  const redirectUrl = searchParams?.get('redirect_url') || defaultRedirect
 
   return (
     <div className="min-h-screen bg-linear-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
