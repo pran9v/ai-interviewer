@@ -217,21 +217,22 @@ function OnboardingContent() {
     }
 
     setGoogleLoading(true)
+    const dashboardRedirect = '/dashboard'
+    const onboardingRedirect = '/onboarding?mode=signup'
+    const redirectUrl =
+      authMode === 'signin'
+        ? `/sso-callback?redirect_url=${encodeURIComponent(dashboardRedirect)}`
+        : `/sso-callback?redirect_url=${encodeURIComponent(onboardingRedirect)}`
+
     try {
-      const dashboardRedirect = '/dashboard'
-      const onboardingRedirect = '/onboarding?mode=signup'
-      const redirectUrl =
-        authMode === 'signin'
-          ? `/sso-callback?redirect_url=${encodeURIComponent(dashboardRedirect)}`
-          : `/sso-callback?redirect_url=${encodeURIComponent(onboardingRedirect)}`
       if (authMode === 'signin') {
-        await signIn?.authenticateWithRedirect({
+        void signIn?.authenticateWithRedirect({
           strategy: 'oauth_google',
           redirectUrl,
           redirectUrlComplete: dashboardRedirect,
         })
       } else {
-        await signUp?.authenticateWithRedirect({
+        void signUp?.authenticateWithRedirect({
           strategy: 'oauth_google',
           redirectUrl,
           redirectUrlComplete: onboardingRedirect,
@@ -240,7 +241,6 @@ function OnboardingContent() {
     } catch (err: any) {
       console.error('Google sign in error:', err)
       toast.error('Failed to sign in with Google')
-    } finally {
       setGoogleLoading(false)
     }
   }
