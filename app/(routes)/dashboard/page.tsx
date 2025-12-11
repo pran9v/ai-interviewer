@@ -385,6 +385,17 @@ function Dashboard() {
                                     <LayoutDashboard className="mr-2 size-4" />
                                     Dashboard
                                 </Button>
+                                <Button
+                                    variant="ghost"
+                                    className={cn(
+                                        'rounded-full px-3 py-2 text-xs font-semibold transition-colors duration-300 lg:hidden',
+                                        isDark ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-white text-red-500 shadow-md hover:bg-red-50',
+                                    )}
+                                    onClick={handleSignOut}
+                                >
+                                    <LogOut className="mr-1.5 size-4" />
+                                    Log out
+                                </Button>
                             </div>
                             {navItems.length > 1 && (
                                 <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
@@ -495,7 +506,7 @@ function Dashboard() {
                                     className={cn(
                                         'relative overflow-hidden rounded-3xl p-6 sm:p-8 transition-colors duration-300',
                                         isDark
-                                            ? 'bg-gradient-to-r from-[#111111] to-black border border-white/10 shadow-none'
+                                            ? 'bg-linear-to-r from-[#111111] to-black border border-white/10 shadow-none'
                                             : 'border border-white/50 shadow-xl',
                                     )}
                                     style={heroStyle}
