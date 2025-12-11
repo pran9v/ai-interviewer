@@ -17,10 +17,11 @@ function OnboardingContent() {
   const searchParams = useSearchParams()
   const { isLoaded: signUpLoaded, signUp, setActive: setActiveSignUp } = useSignUp()
   const { isLoaded: signInLoaded, signIn, setActive: setActiveSignIn } = useSignIn()
-  const { user } = useUser()
+  const { user, isSignedIn, isLoaded: userLoaded } = useUser()
   const [authMode, setAuthMode] = useState<AuthMode>('signup')
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
 
   // Check URL params for auth mode
   useEffect(() => {
@@ -29,6 +30,13 @@ function OnboardingContent() {
       setAuthMode('signin')
     }
   }, [searchParams])
+
+  // If user already has a session, send them to dashboard
+  useEffect(() => {
+    if (userLoaded && isSignedIn) {
+      router.replace('/dashboard')
+    }
+  }, [userLoaded, isSignedIn, router])
   
   // Form data
   const [firstName, setFirstName] = useState('')
@@ -65,6 +73,10 @@ function OnboardingContent() {
   // Sign In handler
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSignedIn) {
+      router.replace('/dashboard')
+      return
+    }
     if (!signInLoaded) return
     setLoading(true)
     try {
@@ -84,6 +96,10 @@ function OnboardingContent() {
   // Sign Up handler
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSignedIn) {
+      router.replace('/dashboard')
+      return
+    }
     if (!signUpLoaded) return
     if (!agreeToTerms) {
       toast.error('Please agree to the terms & privacy policy')
@@ -178,16 +194,36 @@ function OnboardingContent() {
 
   // Google OAuth handler
   const handleGoogleSignIn = async () => {
-    if (!signUpLoaded) return
+    if (isSignedIn) {
+      router.replace('/dashboard')
+      return
+    }
+    const targetLoaded = authMode === 'signin' ? signInLoaded : signUpLoaded
+    if (!targetLoaded) {
+      toast.message?.('Still loading, please try again in a moment')
+      return
+    }
+
+    setGoogleLoading(true)
     try {
-      await signUp?.authenticateWithRedirect({
-        strategy: 'oauth_google',
-        redirectUrl: '/sso-callback',
-        redirectUrlComplete: '/dashboard',
-      })
+      if (authMode === 'signin') {
+        await signIn?.authenticateWithRedirect({
+          strategy: 'oauth_google',
+          redirectUrl: '/sso-callback',
+          redirectUrlComplete: '/dashboard',
+        })
+      } else {
+        await signUp?.authenticateWithRedirect({
+          strategy: 'oauth_google',
+          redirectUrl: '/sso-callback',
+          redirectUrlComplete: '/dashboard',
+        })
+      }
     } catch (err: any) {
       console.error('Google sign in error:', err)
       toast.error('Failed to sign in with Google')
+    } finally {
+      setGoogleLoading(false)
     }
   }
 
@@ -196,6 +232,22 @@ function OnboardingContent() {
   // Step 2: Recruiter Type (step 2)
   // Step 3: University Info (step 3 & 4)
   const visualStep = step === 1 ? 1 : step === 2 ? 2 : 3
+
+  if (!userLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
+      </div>
+    )
+  }
+
+  if (isSignedIn) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 lg:p-8" style={{
@@ -288,6 +340,7 @@ function OnboardingContent() {
                     className="w-full h-12 rounded-full border-gray-200 hover:bg-gray-50 text-gray-700 font-medium text-sm relative"
                     onClick={handleGoogleSignIn}
                     type="button"
+                    disabled={googleLoading || (authMode === 'signin' ? !signInLoaded : !signUpLoaded)}
                   >
                     <div className="absolute left-6 flex items-center justify-center">
                       <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -297,7 +350,14 @@ function OnboardingContent() {
                         <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                       </svg>
                     </div>
-                    Log in with Google
+                    {googleLoading ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Redirecting...
+                      </div>
+                    ) : (
+                      'Log in with Google'
+                    )}
                   </Button>
                 </div>
 
