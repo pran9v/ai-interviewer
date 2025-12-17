@@ -29,18 +29,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ valid: false, reason: "not_found" });
     }
 
-    const now = Date.now();
-    if (record.expiresAt && record.expiresAt < now) {
-      return NextResponse.json({ valid: false, reason: "expired" });
-    }
-
-    if (
-      typeof record.maxUses === "number" &&
-      record.useCount >= record.maxUses
-    ) {
-      return NextResponse.json({ valid: false, reason: "max_used" });
-    }
-
     if (String(record.interviewId) !== interviewId) {
       return NextResponse.json({ valid: false, reason: "mismatch" });
     }

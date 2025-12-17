@@ -57,19 +57,6 @@ export const IncrementUse = mutation({
       return { ok: false as const, reason: "not_found" as const };
     }
 
-    const now = Date.now();
-    if (record.expiresAt && record.expiresAt < now) {
-      return { ok: false as const, reason: "expired" as const };
-    }
-
-    if (
-      typeof record.maxUses === "number" &&
-      record.maxUses >= 0 &&
-      record.useCount >= record.maxUses
-    ) {
-      return { ok: false as const, reason: "max_used" as const };
-    }
-
     await ctx.db.patch(record._id, {
       useCount: record.useCount + 1,
     });

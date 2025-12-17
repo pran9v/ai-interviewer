@@ -29,7 +29,6 @@ type ShareInterviewLinkProps = {
   className?: string;
 };
 
-const DEFAULT_EXPIRY_SECONDS = 48 * 60 * 60;
 const PRIMARY_BLUE = "#1E90FF";
 const PRIMARY_BLUE_DARK = "#1176D6";
 const PRIMARY_BLUE_LIGHT = "#E6F3FF";
@@ -66,8 +65,6 @@ export function ShareInterviewLink({
     try {
       const response = await axios.post("/api/shorten", {
         interviewId,
-        expiresInSeconds: DEFAULT_EXPIRY_SECONDS,
-        maxUses: 1,
         startAutomatically: true,
       });
 
@@ -140,7 +137,7 @@ export function ShareInterviewLink({
     }
     const subject = encodeURIComponent("Matryc interview invite");
     const body = encodeURIComponent(
-      `Hi,\n\nHere is your interview link:\n${shortUrl}\n\nThe link may expire after first use or in 48 hours.\n\nThanks!`
+      `Hi,\n\nHere is your interview link:\n${shortUrl}\n\nThis link can be reused and will not expire.\n\nThanks!`
     );
     window.location.href = `mailto:${encodeURIComponent(
       email.trim()
@@ -154,8 +151,8 @@ export function ShareInterviewLink({
         <DialogHeader>
           <DialogTitle>Share interview link</DialogTitle>
           <DialogDescription>
-            Generate a short, single-use link to start the interview
-            automatically.
+            Generate a short link to start the interview automatically. The same
+            link can be used by multiple candidates.
           </DialogDescription>
         </DialogHeader>
 
@@ -193,8 +190,7 @@ export function ShareInterviewLink({
             </div>
             {token && (
               <p className="mt-2 text-xs text-[#0F3B66]">
-                Token: <span className="font-semibold text-[#1E90FF]">{token}</span> • Expires in 48h •
-                One-time use
+                Token: <span className="font-semibold text-[#1E90FF]">{token}</span> • Reusable
               </p>
             )}
           </div>
@@ -245,7 +241,7 @@ export function ShareInterviewLink({
 
           <div className="rounded-xl border border-[#B5DAFF] bg-[#E6F3FF] px-4 py-3 text-sm text-[#0F3B66]">
             The link redirects to the interview start page with auto-start
-            enabled. It expires after 48 hours or after the first use.
+            enabled. The same link can be used by multiple candidates.
           </div>
         </div>
 

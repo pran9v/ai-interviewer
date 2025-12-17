@@ -52,7 +52,7 @@ export async function GET(
     return friendlyRedirect("/link-expired");
   }
 
-  // Ignore preview/unfurl requests so they don't consume the one-time link.
+  // Ignore preview/unfurl requests so they don't count as a real visit.
   if (isPreviewRequest(request)) {
     return previewResponse();
   }
@@ -65,28 +65,13 @@ export async function GET(
       return friendlyRedirect("/link-expired");
     }
 
-    const now = Date.now();
-    if (record.expiresAt && record.expiresAt < now) {
-      return friendlyRedirect("/link-expired");
-    }
-
-    if (
-      typeof record.maxUses === "number" &&
-      record.maxUses >= 0 &&
-      record.useCount >= record.maxUses
-    ) {
-      return friendlyRedirect("/link-used");
-    }
-
     const incrementResult = await client.mutation(
       api.ShortLinks.IncrementUse,
       { token }
     );
 
     if (!incrementResult?.ok) {
-      const destination =
-        incrementResult?.reason === "max_used" ? "/link-used" : "/link-expired";
-      return friendlyRedirect(destination);
+      return friendlyRedirect("/link-expired");
     }
 
     const url = new URL(request.url);

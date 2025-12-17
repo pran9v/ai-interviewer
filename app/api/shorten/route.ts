@@ -11,8 +11,6 @@ type ShortenRequestBody = {
   startAutomatically?: boolean;
 };
 
-const DEFAULT_EXPIRY_SECONDS = 48 * 60 * 60; // 48 hours
-
 const alphabet =
   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
@@ -58,13 +56,11 @@ export async function POST(req: NextRequest) {
 
     const token = generateToken(8 + Math.floor(Math.random() * 3)); // 8-10 chars
     const expiresAt =
-      Date.now() +
-      1000 *
-        (typeof expiresInSeconds === "number"
-          ? expiresInSeconds
-          : DEFAULT_EXPIRY_SECONDS);
+      typeof expiresInSeconds === "number" && expiresInSeconds > 0
+        ? Date.now() + 1000 * expiresInSeconds
+        : undefined;
     const safeMaxUses =
-      typeof maxUses === "number" && maxUses > 0 ? maxUses : 1;
+      typeof maxUses === "number" && maxUses > 0 ? maxUses : undefined;
 
     const client = new ConvexHttpClient(convexUrl);
     await client.mutation(api.ShortLinks.Create, {
