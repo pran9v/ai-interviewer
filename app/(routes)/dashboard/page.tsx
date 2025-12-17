@@ -234,7 +234,9 @@ function Dashboard() {
     );
     const candidateCount = interviewList.length;
 
-    const normalizeFeedback = (fb: any) => {
+    const normalizeFeedback = (
+        fb: any,
+    ): { feedback: string; rating: number | null; suggestions: string[] } | null => {
         if (!fb) return null;
         if (typeof fb === 'string') {
             return { feedback: fb, rating: null, suggestions: [] as string[] };
@@ -242,12 +244,14 @@ function Dashboard() {
         const feedbackText = fb.feedback ?? fb.feedbackText ?? '';
         const ratingRaw = fb.rating ?? fb.score ?? null;
         const rating = typeof ratingRaw === 'number' ? ratingRaw : Number(ratingRaw) || null;
-        const suggestions = Array.isArray(fb.suggestions)
+        const suggestions = (Array.isArray(fb.suggestions)
             ? fb.suggestions
             : fb.suggestion
                 ? [fb.suggestion]
-                : [];
-        return { feedback: feedbackText, rating, suggestions };
+                : []) as unknown[];
+
+        const normalizedSuggestions = suggestions.map((item) => String(item));
+        return { feedback: feedbackText, rating, suggestions: normalizedSuggestions };
     };
 
     const pageClasses = cn(
