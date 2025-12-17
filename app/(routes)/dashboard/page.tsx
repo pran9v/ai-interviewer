@@ -27,6 +27,13 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
 import CreateInterviewDialog from '../_components/CreateInterviewDialog';
 import { InterviewData } from '../interview/[interviewId]/start/page';
@@ -141,6 +148,8 @@ function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [themeChoice, setThemeChoice] = useState<'light' | 'dark'>('light');
     const isDark = themeChoice === 'dark';
+    const [selectedCandidate, setSelectedCandidate] = useState<InterviewData | null>(null);
+    const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
     const handleSignOut = useCallback(async () => {
         try {
@@ -224,6 +233,22 @@ function Dashboard() {
         [interviewList],
     );
     const candidateCount = interviewList.length;
+
+    const normalizeFeedback = (fb: any) => {
+        if (!fb) return null;
+        if (typeof fb === 'string') {
+            return { feedback: fb, rating: null, suggestions: [] as string[] };
+        }
+        const feedbackText = fb.feedback ?? fb.feedbackText ?? '';
+        const ratingRaw = fb.rating ?? fb.score ?? null;
+        const rating = typeof ratingRaw === 'number' ? ratingRaw : Number(ratingRaw) || null;
+        const suggestions = Array.isArray(fb.suggestions)
+            ? fb.suggestions
+            : fb.suggestion
+                ? [fb.suggestion]
+                : [];
+        return { feedback: feedbackText, rating, suggestions };
+    };
 
     const pageClasses = cn(
         'min-h-screen pb-12 pt-10 transition-colors duration-300 font-sans',
@@ -600,27 +625,36 @@ function Dashboard() {
                                                                 : 'border-[#D7E7FF] bg-[#F3F8FF]',
                                                         )}
                                                     >
-                                                        <div className="min-w-0 flex-1">
-                                                            <p className={cn('truncate text-sm font-semibold', isDark ? 'text-gray-100' : 'text-gray-900')}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setSelectedCandidate(candidate);
+                                                                setIsFeedbackOpen(true);
+                                                            }}
+                                                            className="min-w-0 flex-1 text-left"
+                                                        >
+                                                            <p className={cn('truncate text-sm font-semibold underline-offset-4 hover:underline', isDark ? 'text-gray-100' : 'text-gray-900')}>
                                                                 {candidate.candidateName || 'Guest'}
                                                             </p>
                                                             <p className={cn('mt-1 line-clamp-1 text-xs', isDark ? 'text-gray-400' : 'text-gray-500')}>
                                                                 {candidate.jobTitle || 'No role specified'}
                                                             </p>
-                                                        </div>
-                                                        <Link href={`/interview/${candidate._id}`}>
-                                                            <Button
-                                                                variant="outline"
-                                                                className={cn(
-                                                                    'rounded-full px-5 py-2 text-sm font-semibold transition-colors duration-300',
-                                                                    isDark
-                                                                        ? 'border-white/30 text-white hover:bg-white/10'
-                                                                        : 'border-[#1E90FF] text-[#1E90FF] hover:bg-[#E6F3FF]',
-                                                                )}
-                                                            >
-                                                                Open
-                                                            </Button>
-                                                        </Link>
+                                                        </button>
+                                                        <Button
+                                                            variant="outline"
+                                                            onClick={() => {
+                                                                setSelectedCandidate(candidate);
+                                                                setIsFeedbackOpen(true);
+                                                            }}
+                                                            className={cn(
+                                                                'rounded-full px-5 py-2 text-sm font-semibold transition-colors duration-300',
+                                                                isDark
+                                                                    ? 'border-white/30 text-white hover:bg-white/10'
+                                                                    : 'border-[#1E90FF] text-[#1E90FF] hover:bg-[#E6F3FF]',
+                                                            )}
+                                                        >
+                                                            Open
+                                                        </Button>
                                                     </div>
                                                 ))
                                               : (
@@ -754,6 +788,71 @@ function Dashboard() {
                     </div>
                 </main>
             </div>
+            <Dialog open={isFeedbackOpen} onOpenChange={setIsFeedbackOpen}>
+                <DialogContent
+                    className={cn(
+                        'max-w-lg sm:max-w-xl',
+                        isDark
+                            ? 'bg-[#0F0F0F] text-gray-100 border border-white/10'
+                            : 'bg-white text-gray-900',
+                    )}
+                >
+                    <DialogHeader className="space-y-1">
+                        <DialogTitle className={cn('text-xl font-semibold', isDark ? 'text-white' : 'text-gray-900')}>
+                            Interview Feedback
+                        </DialogTitle>
+                        <DialogDescription className={cn('text-sm', isDark ? 'text-gray-400' : 'text-gray-600')}>
+                            {selectedCandidate?.candidateName
+                                ? `Feedback for ${selectedCandidate.candidateName}`
+                                : 'Feedback details'}
+                        </DialogDescription>
+                    </DialogHeader>
+                    {(() => {
+                        const fb = normalizeFeedback(selectedCandidate?.feedback);
+                        if (!fb) {
+                            return <p className={cn('text-sm', isDark ? 'text-gray-400' : 'text-gray-600')}>No feedback available yet.</p>;
+                        }
+                        return (
+                            <div className="space-y-4">
+                                {fb.feedback && (
+                                    <div
+                                        className={cn(
+                                            'rounded-xl p-3 border',
+                                            isDark ? 'bg-[#111827] border-white/10 text-gray-100' : 'bg-gray-50 border-gray-100 text-gray-800',
+                                        )}
+                                    >
+                                        <p className={cn('text-xs font-semibold mb-1', isDark ? 'text-gray-300' : 'text-gray-700')}>Feedback overview</p>
+                                        <p className="text-sm whitespace-pre-wrap leading-relaxed">{fb.feedback}</p>
+                                    </div>
+                                )}
+                                {fb.suggestions.length > 0 && (
+                                    <div
+                                        className={cn(
+                                            'rounded-xl p-3 border',
+                                            isDark ? 'bg-[#111827] border-white/10 text-gray-100' : 'bg-gray-50 border-gray-100 text-gray-800',
+                                        )}
+                                    >
+                                        <p className={cn('text-xs font-semibold mb-1', isDark ? 'text-gray-300' : 'text-gray-700')}>Suggested follow-ups</p>
+                                        <ul className="space-y-2">
+                                            {fb.suggestions.map((s, idx) => (
+                                                <li
+                                                    key={`${idx}-${s}`}
+                                                    className={cn(
+                                                        'text-sm leading-relaxed rounded-lg border p-2',
+                                                        isDark ? 'bg-[#0B1220] border-white/10 text-gray-100' : 'bg-white border-gray-100 text-gray-800',
+                                                    )}
+                                                >
+                                                    {s}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

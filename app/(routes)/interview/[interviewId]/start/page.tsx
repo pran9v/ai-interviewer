@@ -398,6 +398,16 @@ function StartInterview() {
                     'We will email you once the full evaluation is ready.'
                 ]
             };
+            if (interviewData?._id) {
+                try {
+                    await updateFeedback({
+                        recordId: interviewData._id,
+                        feedback: fallbackFeedback
+                    });
+                } catch (updateErr) {
+                    console.error('Failed to store fallback feedback', updateErr);
+                }
+            }
             setFeedbackSummary(fallbackFeedback);
             setFeedbackError('Automatic feedback is delayed. A summary will arrive shortly.');
         } finally {
@@ -582,9 +592,6 @@ function StartInterview() {
                         <div className="bg-white rounded-3xl shadow-2xl p-12 text-center min-w-[300px]">
                             <h2 className="text-3xl font-bold mb-2">Starts in... {countdown}</h2>
                             <p className="text-gray-500 text-sm mb-6">Your interview is starting soon.</p>
-                            <Button className="w-full rounded-full h-12 bg-blue-500 hover:bg-blue-600 text-white">
-                                Get ready...
-                            </Button>
                         </div>
                     </motion.div>
                 )}
