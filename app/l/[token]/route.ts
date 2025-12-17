@@ -6,6 +6,39 @@ function friendlyRedirect(path: string) {
   return NextResponse.redirect(path, 302);
 }
 
+function isPreviewRequest(request: NextRequest) {
+  const method = request.method.toUpperCase();
+  if (method === "HEAD") return true;
+
+  const userAgent = request.headers.get("user-agent")?.toLowerCase() ?? "";
+  // WhatsApp (and similar preview bots) include "whatsapp" in the UA when unfurling links.
+  if (userAgent.includes("whatsapp")) return true;
+
+  // Common social preview bots; keeping list narrow to avoid false positives.
+  if (userAgent.includes("facebookexternalhit") || userAgent.includes("twitterbot")) {
+    return true;
+  }
+
+  return false;
+}
+
+function previewResponse() {
+  // Return minimal HTML with og tags so previews render, without consuming the link.
+  const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta property="og:title" content="Matryc interview link" />
+    <meta property="og:description" content="Open to start your interview." />
+  </head>
+  <body>Preview available. Open the link to start the interview.</body>
+</html>`;
+  return new NextResponse(html, {
+    status: 200,
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+}
+
 type TokenParams = { token: string };
 
 export async function GET(
@@ -17,6 +50,11 @@ export async function GET(
 
   if (!convexUrl) {
     return friendlyRedirect("/link-expired");
+  }
+
+  // Ignore preview/unfurl requests so they don't consume the one-time link.
+  if (isPreviewRequest(request)) {
+    return previewResponse();
   }
 
   try {

@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
           ? expiresInSeconds
           : DEFAULT_EXPIRY_SECONDS);
     const safeMaxUses =
-      typeof maxUses === "number" && maxUses > 0 ? maxUses : 2;
+      typeof maxUses === "number" && maxUses > 0 ? maxUses : 1;
 
     const client = new ConvexHttpClient(convexUrl);
     await client.mutation(api.ShortLinks.Create, {
