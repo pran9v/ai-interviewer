@@ -7,7 +7,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Mic, Video, LogOut, Check, ChevronRight, Loader2, Sparkles, MicOff, VideoOff } from 'lucide-react';
+import { Mic, Video, LogOut, Check, ChevronRight, Loader2, Sparkles, MicOff, VideoOff, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { FeedbackInfo } from '@/app/(routes)/dashboard/_components/FeedbackDialog';
 import { ConversationManager, ConversationMessage } from '@/app/utils/conversation-manager';
@@ -39,7 +39,7 @@ type InterviewQuestions = {
     question: string
 }
 
-type Step = 'landing' | 'audio-check' | 'countdown' | 'interview' | 'completed' | 'feedback' | 'thank-you';
+type Step = 'landing' | 'audio-check' | 'countdown' | 'interview' | 'completed' | 'feedback' | 'summary' | 'thank-you';
 
 function StartInterview() {
     const { interviewId } = useParams();
@@ -65,6 +65,10 @@ function StartInterview() {
     const [isMicOn, setIsMicOn] = useState(true);
     const [isVideoOn, setIsVideoOn] = useState(true);
     const [callSeconds, setCallSeconds] = useState(0);
+    const [answeredQuestions, setAnsweredQuestions] = useState<number[]>([]);
+    const [feedbackSummary, setFeedbackSummary] = useState<FeedbackInfo | string | null>(null);
+    const [feedbackLoading, setFeedbackLoading] = useState(false);
+    const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
     // Video refs
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -341,26 +345,85 @@ function StartInterview() {
     };
     
     const submitFeedback = async (rating: number, text: string) => {
+        setFeedbackError(null);
+        setFeedbackLoading(true);
+        // Show summary immediately with loader
+        setStep('summary');
         try {
-            setStep('thank-you');
-            
             // Process full transcript
             const conversation = conversationManager?.getConversation() || [];
-             if (conversation.length > 0) {
-            const response = await axios.post('/api/interview-feedback', {
-                messages: conversation
-            });
-            const feedback = response.data;
-            await updateFeedback({
-                recordId: interviewData!._id,
-                feedback: feedback
-            });
-             }
+            let feedback: FeedbackInfo | string | null = null;
+
+            if (conversation.length > 0) {
+                try {
+                    const response = await axios.post('/api/interview-feedback', {
+                        messages: conversation
+                    });
+                    feedback = response.data;
+                } catch (apiErr) {
+                    console.error('Feedback API failed', apiErr);
+                    setFeedbackError('Automatic feedback is delayed. A summary will arrive shortly.');
+                }
+            }
+
+            const resolvedFeedback = feedback ?? {
+                feedback: text || 'Thanks for completing your interview. We are processing your responses and will share detailed feedback soon.',
+                rating: normalizedBaseRating ?? derivedCoverageRating ?? 0,
+                suggestions: [
+                    'Use View detailed report to review your questions and answers.',
+                    'We will email you once the full evaluation is ready.'
+                ]
+            };
+
+            if (interviewData?._id) {
+                try {
+                    await updateFeedback({
+                        recordId: interviewData._id,
+                        feedback: resolvedFeedback
+                    });
+                } catch (updateErr) {
+                    console.error('Failed to store feedback', updateErr);
+                    setFeedbackError(prev => prev ?? 'We saved your session, but storing feedback was delayed.');
+                }
+            }
+
+            setFeedbackSummary(resolvedFeedback);
         } catch (err) {
             console.error('Error generating feedback:', err);
-            // Still show thank you
+            const fallbackFeedback: FeedbackInfo = {
+                feedback: 'Thanks for completing your interview. We are processing your responses and will share detailed feedback soon.',
+                rating: derivedCoverageRating ?? 0,
+                suggestions: [
+                    'Use View detailed report to review your questions and answers.',
+                    'We will email you once the full evaluation is ready.'
+                ]
+            };
+            setFeedbackSummary(fallbackFeedback);
+            setFeedbackError('Automatic feedback is delayed. A summary will arrive shortly.');
+        } finally {
+            setFeedbackLoading(false);
         }
     };
+
+    const totalQuestions = interviewData?.interviewQuestions?.length ?? 0;
+    const answeredSet = new Set(answeredQuestions);
+    const answeredList = interviewData?.interviewQuestions
+        ?.map((item, idx) => ({ ...item, idx }))
+        .filter(({ idx }) => answeredSet.has(idx)) ?? [];
+    const unansweredList = interviewData?.interviewQuestions
+        ?.map((item, idx) => ({ ...item, idx }))
+        .filter(({ idx }) => !answeredSet.has(idx)) ?? [];
+    const answeredCount = answeredSet.size;
+    const derivedCoverageRating = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 10) : null;
+    const baseRating = typeof feedbackSummary === 'string' ? null : (feedbackSummary?.rating ?? null);
+    const normalizedBaseRating = baseRating === null
+        ? null
+        : (() => {
+            // If backend sends 1-5, scale to 10; if already 1-10 keep; clamp to 10
+            const scaled = baseRating <= 5 ? (baseRating / 5) * 10 : baseRating;
+            return Math.min(10, Math.round(scaled));
+        })();
+    const displayRating = normalizedBaseRating ?? derivedCoverageRating ?? 0;
 
     // Views
     
@@ -687,6 +750,13 @@ When finished, say: "Thank you for your time. This concludes our interview."
                                                         // Simple sync to ConversationManager
                                                         if (transcript.match(/[.?!]$/)) {
                                                              conversationManager?.addUserResponse(userTranscriptBuffer.current);
+                                                            const lastAskedIndex = (conversationManager?.getCurrentQuestionIndex() || 1) - 1;
+                                                            if (lastAskedIndex >= 0) {
+                                                                setAnsweredQuestions(prev => {
+                                                                    if (prev.includes(lastAskedIndex)) return prev;
+                                                                    return [...prev, lastAskedIndex];
+                                                                });
+                                                            }
                                         userTranscriptBuffer.current = '';
                                     }
                                                     } else {
@@ -843,7 +913,133 @@ When finished, say: "Thank you for your time. This concludes our interview."
                     </motion.div>
                 )}
 
-                 {/* 7. Thank You */}
+                {/* 7. Summary */}
+                {step === 'summary' && (
+                    <motion.div 
+                        key="summary"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="min-h-screen flex items-center justify-center p-4"
+                    >
+                        <div className="bg-white rounded-3xl shadow-xl p-6 sm:p-8 w-full max-w-4xl border border-gray-100 relative">
+                            {feedbackLoading && (
+                                <div className="absolute inset-0 bg-white/70 backdrop-blur-sm rounded-3xl flex flex-col items-center justify-center gap-3 z-10">
+                                    <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                                    <p className="text-sm text-gray-600 text-center px-6">Generating your interview summary...</p>
+                                </div>
+                            )}
+
+                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-gray-900">Interview summary</h2>
+                                    <p className="text-sm text-gray-500">Here is how you performed in this session.</p>
+                                </div>
+                                <div className="text-xs text-gray-500 flex items-center gap-2">
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 font-medium text-gray-700">
+                                        <span className="h-2 w-2 rounded-full bg-green-500" />
+                                        Duration {formatCallDuration(callSeconds)}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="bg-gray-50 rounded-2xl p-4 mb-4">
+                                {feedbackError && (
+                                    <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
+                                        {feedbackError}
+                                    </div>
+                                )}
+                                {feedbackSummary ? (
+                                    typeof feedbackSummary === 'string' ? (
+                                        <p className="text-gray-700 text-sm whitespace-pre-wrap">{feedbackSummary}</p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <Star className="w-5 h-5 text-yellow-500" />
+                                                <span className="font-semibold text-gray-800">Rating:</span>
+                                                <span className="text-gray-700">{displayRating}/10</span>
+                                                <span className="text-xs text-gray-500">({answeredCount}/{totalQuestions} questions answered)</span>
+                                            </div>
+                                            <div>
+                                                <h4 className="font-semibold text-gray-800">Feedback</h4>
+                                                <p className="text-sm text-gray-700">{feedbackSummary.feedback}</p>
+                                            </div>
+                                            {feedbackSummary.suggestions?.length > 0 && (
+                                                <div>
+                                                    <h4 className="font-semibold text-gray-800">Suggestions</h4>
+                                                    <ul className="mt-1 space-y-2">
+                                                        {feedbackSummary.suggestions.map((tip, idx) => (
+                                                            <li key={`${idx}-${tip}`} className="text-sm text-gray-700 bg-white rounded-lg p-3 border border-gray-100">
+                                                                {tip}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                ) : (
+                                    <p className="text-sm text-gray-600">Your interview has been submitted. We will share the detailed feedback soon.</p>
+                                )}
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <div className="rounded-2xl border border-gray-100 p-4">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h4 className="font-semibold text-gray-800">Answered</h4>
+                                        <span className="text-xs text-gray-500">{answeredList.length} / {totalQuestions}</span>
+                                    </div>
+                                    {answeredList.length > 0 ? (
+                                        <ul className="space-y-2 max-h-64 overflow-auto pr-1">
+                                            {answeredList.map((item) => (
+                                                <li key={`${item.idx}-${item.question}`} className="text-sm text-gray-800 bg-green-50 border border-green-100 rounded-lg p-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="h-2 w-2 rounded-full bg-green-500" />
+                                                        <span className="font-medium">Q{item.idx + 1}</span>
+                                                    </div>
+                                                    <p className="mt-1 text-gray-700">{item.question}</p>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p className="text-sm text-gray-500">No answers recorded.</p>
+                                    )}
+                                </div>
+                                <div className="rounded-2xl border border-gray-100 p-4">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h4 className="font-semibold text-gray-800">Unanswered</h4>
+                                        <span className="text-xs text-gray-500">{unansweredList.length} remaining</span>
+                                    </div>
+                                    {unansweredList.length > 0 ? (
+                                        <ul className="space-y-2 max-h-64 overflow-auto pr-1">
+                                            {unansweredList.map((item) => (
+                                                <li key={`${item.idx}-${item.question}`} className="text-sm text-gray-800 bg-amber-50 border border-amber-100 rounded-lg p-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="h-2 w-2 rounded-full bg-amber-500" />
+                                                        <span className="font-medium">Q{item.idx + 1}</span>
+                                                    </div>
+                                                    <p className="mt-1 text-gray-700">{item.question}</p>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p className="text-sm text-gray-500">You covered every question.</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex justify-center mt-6">
+                                <Button 
+                                    className="rounded-full px-8 bg-blue-500 hover:bg-blue-600 text-white"
+                                    onClick={() => setStep('thank-you')}
+                                >
+                                    Done
+                                </Button>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+
+                 {/* 8. Thank You */}
                  {step === 'thank-you' && (
                     <motion.div 
                         key="thank-you"

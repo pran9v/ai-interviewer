@@ -11,7 +11,8 @@ const isPublicRoute = createRouteMatcher([
     '/link-used',
     '/interview/(.*)/start(.*)',
     '/api/validate-shortlink(.*)',
-    '/api/realtime-session(.*)'
+    '/api/realtime-session(.*)',
+    '/api/interview-feedback(.*)',
 ])
 
 export default clerkMiddleware(async (auth, req) => {
