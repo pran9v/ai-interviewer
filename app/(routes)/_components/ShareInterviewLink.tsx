@@ -67,7 +67,7 @@ export function ShareInterviewLink({
       const response = await axios.post("/api/shorten", {
         interviewId,
         expiresInSeconds: DEFAULT_EXPIRY_SECONDS,
-        maxUses: 2,
+        maxUses: 1,
         startAutomatically: true,
       });
 
@@ -140,7 +140,7 @@ export function ShareInterviewLink({
     }
     const subject = encodeURIComponent("Matryc interview invite");
     const body = encodeURIComponent(
-      `Hi,\n\nHere is your interview link:\n${shortUrl}\n\nThe link may expire after two uses or in 48 hours.\n\nThanks!`
+      `Hi,\n\nHere is your interview link:\n${shortUrl}\n\nThe link may expire after first use or in 48 hours.\n\nThanks!`
     );
     window.location.href = `mailto:${encodeURIComponent(
       email.trim()
@@ -154,8 +154,8 @@ export function ShareInterviewLink({
         <DialogHeader>
           <DialogTitle>Share interview link</DialogTitle>
           <DialogDescription>
-            Generate a short link that expires after two uses and starts the
-            interview automatically.
+            Generate a short, single-use link to start the interview
+            automatically.
           </DialogDescription>
         </DialogHeader>
 
@@ -194,7 +194,7 @@ export function ShareInterviewLink({
             {token && (
               <p className="mt-2 text-xs text-[#0F3B66]">
                 Token: <span className="font-semibold text-[#1E90FF]">{token}</span> • Expires in 48h •
-                Two uses max
+                One-time use
               </p>
             )}
           </div>
@@ -245,7 +245,7 @@ export function ShareInterviewLink({
 
           <div className="rounded-xl border border-[#B5DAFF] bg-[#E6F3FF] px-4 py-3 text-sm text-[#0F3B66]">
             The link redirects to the interview start page with auto-start
-            enabled. It expires after 48 hours or after two uses.
+            enabled. It expires after 48 hours or after the first use.
           </div>
         </div>
 
