@@ -51,6 +51,7 @@ function StartInterview() {
     // State
     const [step, setStep] = useState<Step>('landing');
     const [interviewData, setInterviewData] = useState<InterviewData>();
+  const [templateInterview, setTemplateInterview] = useState<InterviewData>();
     const [loading, setLoading] = useState(true);
     const [candidateName, setCandidateName] = useState('');
     const [selectedMic, setSelectedMic] = useState<string>('');
@@ -80,6 +81,7 @@ function StartInterview() {
     const [audioRecorder] = useState(() => new AudioRecorder());
     
     // Mutations
+  const saveInterviewQuestion = useMutation(api.Interview.SaveInterviewQuestion);
     const updateFeedback = useMutation(api.Interview.UpdateFeedback);
     const startInterview = useMutation(api.Interview.StartInterview);
     const updateConversation = useMutation(api.Interview.UpdateConversation);
@@ -103,6 +105,10 @@ function StartInterview() {
         });
                 // @ts-ignore
         setInterviewData(result);
+                // Preserve the template separately so each visitor can get a fresh session
+                // without mutating the original interview record.
+                // @ts-ignore
+                setTemplateInterview(result);
 
                 if (typeof result?.videoRequired === 'boolean') {
                     setIsVideoOn(result.videoRequired);
@@ -146,6 +152,68 @@ function StartInterview() {
         };
         getDevices();
     }, []);
+
+    const ensureInterviewSession = useCallback(async () => {
+        // If we already cloned the template for this candidate, reuse it
+        if (
+            templateInterview?._id &&
+            interviewData?._id &&
+            interviewData._id !== templateInterview._id
+        ) {
+            return interviewData;
+        }
+
+        if (!templateInterview?._id || !templateInterview.userId) {
+            toast.error('This interview link is not available. Please request a new one.');
+            return null;
+        }
+
+        try {
+            const created = await saveInterviewQuestion({
+                questions: templateInterview.interviewQuestions,
+                resumeUrl: templateInterview.resumeUrl ?? undefined,
+                uid: templateInterview.userId as Id<'UserTable'>,
+                jobTitle: templateInterview.jobTitle ?? undefined,
+                jobDescription: templateInterview.jobDescription ?? undefined,
+                videoRequired: templateInterview.videoRequired ?? undefined,
+            });
+
+            let newId: Id<'InterviewSessionTable'> | null = null;
+            if (typeof created === 'string') {
+                newId = created as Id<'InterviewSessionTable'>;
+            } else if (created && typeof created === 'object') {
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                newId = (created._id || created.id || created.value) as Id<'InterviewSessionTable'>;
+                if (!newId && typeof (created as any).toString === 'function') {
+                    newId = (created as any).toString() as Id<'InterviewSessionTable'>;
+                }
+            }
+
+            if (!newId) {
+                throw new Error('Invalid interview id returned from backend');
+            }
+
+            const clonedData: InterviewData = {
+                ...templateInterview,
+                _id: newId,
+                status: 'draft',
+                feedback: null,
+                conversation: [],
+                currentQuestionIndex: 0,
+                startedAt: undefined,
+                completedAt: undefined,
+                candidateName: candidateName.trim(),
+            };
+
+            setInterviewData(clonedData);
+            return clonedData;
+        } catch (err) {
+            console.error('Failed to create interview session', err);
+            toast.error('Could not start a fresh interview session. Please try again.');
+            return null;
+        }
+    }, [candidateName, interviewData, saveInterviewQuestion, templateInterview]);
 
     // Start Camera
     const startCamera = async () => {
@@ -242,14 +310,15 @@ function StartInterview() {
 
     // Logic: Start Interview Flow
     const beginInterview = useCallback(async () => {
-        if (!interviewData?._id) return;
+        const session = await ensureInterviewSession();
+        if (!session?._id) return;
         try {
             setCallSeconds(0);
             setStep('interview');
             setIsInterviewStarted(true);
             
             await startInterview({
-                recordId: interviewData._id,
+                recordId: session._id,
                 candidateName: candidateName.trim()
             });
 
@@ -261,7 +330,7 @@ function StartInterview() {
             console.error(err);
             toast.error('Failed to start interview session');
         }
-    }, [candidateName, conversationManager, interviewData, startInterview]);
+    }, [candidateName, conversationManager, ensureInterviewSession, startInterview]);
 
     const handleStartCountdown = useCallback(() => {
         if (isInterviewStarted) return;
