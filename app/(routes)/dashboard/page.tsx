@@ -795,7 +795,7 @@ function Dashboard() {
             <Dialog open={isFeedbackOpen} onOpenChange={setIsFeedbackOpen}>
                 <DialogContent
                     className={cn(
-                        'max-w-lg sm:max-w-xl',
+                        'max-w-lg sm:max-w-xl max-h-[90vh] overflow-y-auto',
                         isDark
                             ? 'bg-[#0F0F0F] text-gray-100 border border-white/10'
                             : 'bg-white text-gray-900',
@@ -810,6 +810,15 @@ function Dashboard() {
                                 ? `Feedback for ${selectedCandidate.candidateName}`
                                 : 'Feedback details'}
                         </DialogDescription>
+                        {(() => {
+                            const fb = normalizeFeedback(selectedCandidate?.feedback);
+                            if (!fb?.rating) return null;
+                            return (
+                                <p className={cn('text-sm font-semibold', isDark ? 'text-gray-200' : 'text-gray-800')}>
+                                    Rating: <span className={isDark ? 'text-white' : 'text-gray-900'}>{fb.rating}/10</span>
+                                </p>
+                            );
+                        })()}
                     </DialogHeader>
                     {(() => {
                         const fb = normalizeFeedback(selectedCandidate?.feedback);

@@ -24,7 +24,7 @@ function FeedbackDialog({ feedbackInfo }: Props) {
     return (
         <Dialog>
             <DialogTrigger asChild><Button>Feedback</Button></DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className='font-bold text-2xl'>Interview Feedback</DialogTitle>
                     <DialogDescription>
