@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
 
     if (
       typeof record.maxUses === "number" &&
-      record.useCount > record.maxUses
+      record.useCount >= record.maxUses
     ) {
       return NextResponse.json({ valid: false, reason: "max_used" });
     }
