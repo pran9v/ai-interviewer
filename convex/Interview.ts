@@ -117,11 +117,57 @@ export const GetInterviewList = query({
         uid: v.id('UserTable')
     },
     handler: async (ctx, args) => {
-        const result = await ctx.db.query('InterviewSessionTable')
-            .filter(q => q.eq(q.field('userId'), args.uid))
-            .order('desc')
-            .collect();
+        try {
+           
+            
+            // Query all interviews for this user
+            const result = await ctx.db.query('InterviewSessionTable')
+                .filter(q => q.eq(q.field('userId'), args.uid))
+                .collect();
+            
+          
+            
+            // Sort by completedAt or startedAt descending (most recent first)
+            const sorted = result.sort((a, b) => {
+                const aTime = a.completedAt ?? a.startedAt ?? 0;
+                const bTime = b.completedAt ?? b.startedAt ?? 0;
+                return bTime - aTime;
+            });
+            
+            console.log('GetInterviewList returning', sorted.length, 'sorted interviews');
+            return sorted;
+        } catch (error) {
+            console.error('GetInterviewList error:', error);
+            throw error;
+        }
+    }
+})
 
-        return result;
+export const SaveQAPair = mutation({
+    args: {
+        recordId: v.id('InterviewSessionTable'),
+        question: v.string(),
+        answer: v.string(),
+        questionIndex: v.number()
+    },
+    handler: async (ctx, args) => {
+        const record = await ctx.db.get(args.recordId);
+        if (!record) {
+            throw new Error('Interview record not found');
+        }
+
+        const existingQAPairs = record.qaPairs || [];
+        const updatedQAPairs = [...existingQAPairs, {
+            question: args.question,
+            answer: args.answer,
+            questionIndex: args.questionIndex,
+            timestamp: Date.now()
+        }];
+
+        await ctx.db.patch(args.recordId, {
+            qaPairs: updatedQAPairs
+        });
+
+        return { success: true };
     }
 })

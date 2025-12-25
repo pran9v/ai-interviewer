@@ -28,6 +28,7 @@ export type InterviewData = {
     feedback: FeedbackInfo | null,
     videoRequired?: boolean | null,
     conversation?: ConversationMessage[],
+    qaPairs?: Array<{question: string; answer: string; questionIndex: number; timestamp: number}>,
     currentQuestionIndex?: number,
     startedAt?: number,
     completedAt?: number,
@@ -86,6 +87,11 @@ function StartInterview() {
     const startInterview = useMutation(api.Interview.StartInterview);
     const updateConversation = useMutation(api.Interview.UpdateConversation);
     const completeInterview = useMutation(api.Interview.CompleteInterview);
+    const saveQAPair = useMutation(api.Interview.SaveQAPair);
+    
+    // Q&A Pairs State
+    const [qaPairs, setQAPairs] = useState<Array<{question: string; answer: string; questionIndex: number; timestamp: number}>>([]);
+    const [currentQuestionText, setCurrentQuestionText] = useState<string>('');
 
     const tokenParam = searchParams.get('token');
     const shouldAutoStart = searchParams.get('autostart') === '1';
@@ -109,6 +115,11 @@ function StartInterview() {
                 // without mutating the original interview record.
                 // @ts-ignore
                 setTemplateInterview(result);
+                
+                // Load existing Q&A pairs if any
+                if (result?.qaPairs && Array.isArray(result.qaPairs)) {
+                    setQAPairs(result.qaPairs);
+                }
 
                 if (typeof result?.videoRequired === 'boolean') {
                     setIsVideoOn(result.videoRequired);
@@ -325,6 +336,12 @@ function StartInterview() {
             const firstQuestion = await conversationManager?.askNextQuestion();
             if (firstQuestion) {
                 setCurrentQuestion(firstQuestion);
+                // Try to match with predefined question
+                if (interviewData?.interviewQuestions?.[0]?.question) {
+                    setCurrentQuestionText(interviewData.interviewQuestions[0].question);
+                } else {
+                    setCurrentQuestionText(firstQuestion);
+                }
             }
         } catch (err) {
             console.error(err);
@@ -658,68 +675,54 @@ function StartInterview() {
                                     >
                                         <div className="p-6 border-b border-gray-100 flex items-center justify-between">
                                             <div>
-                                                <h3 className="text-lg font-semibold text-gray-900">Transcript</h3>
-                                                <p className="text-xs text-gray-500">Live conversation log</p>
+                                                <h3 className="text-lg font-semibold text-gray-900">Questions & Answers</h3>
+                                                <p className="text-xs text-gray-500">{qaPairs.length} answered</p>
                                             </div>
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
                                                 className="rounded-full"
                                                 onClick={() => setShowTranscript(false)}
-                                                aria-label="Close transcript"
+                                                aria-label="Close Q&A"
                                             >
                                                 <span className="text-xl leading-none">&times;</span>
                                             </Button>
                                         </div>
                                         <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50/70">
-                                            <div className="space-y-4 text-sm leading-relaxed">
-                                                <div className="flex gap-3">
-                                                    <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-semibold">
-                                                        AI
-                                                    </div>
-                                                    <div className="flex-1 bg-white rounded-2xl p-4 shadow-sm border border-blue-100">
-                                                        <div className="text-xs uppercase tracking-wide text-blue-500 mb-1">12:00 PM • AI</div>
-                                                        <p className="text-gray-700">
-                                                            Welcome! Let’s take a moment to make sure you’re comfortable before we begin.
-                                                        </p>
-                                                    </div>
+                                            {qaPairs.length === 0 && !currentQuestionText ? (
+                                                <div className="text-center py-8 text-gray-400 text-sm">
+                                                    Questions and answers will appear here
                                                 </div>
-                                                <div className="flex gap-3 flex-row-reverse">
-                                                    <div className="w-10 h-10 rounded-full bg-blue-500/20 text-blue-700 flex items-center justify-center text-sm font-semibold">
-                                                        You
-                                                    </div>
-                                                    <div className="flex-1 bg-blue-500/10 rounded-2xl p-4 shadow-sm border border-blue-100">
-                                                        <div className="text-xs uppercase tracking-wide text-blue-600 mb-1 text-right">12:01 PM • You</div>
-                                                        <p className="text-blue-900 text-right">
-                                                            Sounds great — I’m ready to get started!
-                                                        </p>
-                                                    </div>
+                                            ) : (
+                                                <div className="space-y-4">
+                                                    {qaPairs.map((qa, idx) => (
+                                                        <div key={idx} className="space-y-2">
+                                                            <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+                                                                <div className="text-xs font-semibold text-blue-600 mb-1">Question {qa.questionIndex + 1}</div>
+                                                                <p className="text-sm text-gray-900">{qa.question}</p>
+                                                            </div>
+                                                            <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                                                <div className="text-xs font-semibold text-gray-600 mb-1">Your Answer</div>
+                                                                <p className="text-sm text-gray-700">{qa.answer}</p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    {currentQuestionText && (
+                                                        <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 border-dashed">
+                                                            <div className="text-xs font-semibold text-blue-600 mb-1">Current Question</div>
+                                                            <p className="text-sm text-gray-900">{currentQuestionText}</p>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                                <div className="flex gap-3">
-                                                    <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-semibold">
-                                                        AI
-                                                    </div>
-                                                    <div className="flex-1 bg-white rounded-2xl p-4 shadow-sm border border-blue-100">
-                                                        <div className="text-xs uppercase tracking-wide text-blue-500 mb-1">12:02 PM • AI</div>
-                                                        <p className="text-gray-700">
-                                                            Perfect. To get started, could you walk me through why you’re interested in the program?
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                            )}
                                         </div>
                                         <div className="border-t border-gray-100 p-6 bg-white flex items-center justify-between gap-3">
                                             <div className="text-xs text-gray-400">
-                                                Transcript updates in real-time while the interview is in progress.
+                                                Q&A updates in real-time during the interview.
                                             </div>
-                                            <div className="flex gap-2">
-                                                <Button variant="outline" size="sm" onClick={() => setShowTranscript(false)}>
-                                                    Minimise
-                                                </Button>
-                                                <Button size="sm">
-                                                    Export
-                                                </Button>
-                                            </div>
+                                            <Button variant="outline" size="sm" onClick={() => setShowTranscript(false)}>
+                                                Close
+                                            </Button>
                                         </div>
                                     </motion.aside>
                                 </>
@@ -745,6 +748,54 @@ function StartInterview() {
                                     onClick={() => setShowTranscript(true)}
                                 >
                                     <Sparkles className="w-4 h-4 mr-1" /> Transcript
+                                </Button>
+                            </div>
+
+                            {/* Q&A Panel - Left Side */}
+                            <div className="hidden md:flex absolute left-4 top-20 bottom-20 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-20 overflow-hidden flex-col">
+                                <div className="p-4 border-b border-gray-100 bg-blue-50">
+                                    <h3 className="text-sm font-semibold text-gray-900">Questions & Answers</h3>
+                                    <p className="text-xs text-gray-500 mt-1">{qaPairs.length} answered</p>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                    {qaPairs.length === 0 && !currentQuestionText ? (
+                                        <div className="text-center py-8 text-gray-400 text-sm">
+                                            Questions and answers will appear here
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {qaPairs.map((qa, idx) => (
+                                                <div key={idx} className="space-y-2">
+                                                    <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+                                                        <div className="text-xs font-semibold text-blue-600 mb-1">Question {qa.questionIndex + 1}</div>
+                                                        <p className="text-sm text-gray-900">{qa.question}</p>
+                                                    </div>
+                                                    <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                                        <div className="text-xs font-semibold text-gray-600 mb-1">Your Answer</div>
+                                                        <p className="text-sm text-gray-700">{qa.answer}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {currentQuestionText && (
+                                                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 border-dashed">
+                                                    <div className="text-xs font-semibold text-blue-600 mb-1">Current Question</div>
+                                                    <p className="text-sm text-gray-900">{currentQuestionText}</p>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            {/* Mobile Q&A Toggle Button */}
+                            <div className="md:hidden absolute top-20 left-4 z-20">
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="rounded-full bg-white text-blue-600 border border-blue-100 shadow-sm"
+                                    onClick={() => setShowTranscript(!showTranscript)}
+                                >
+                                    <Sparkles className="w-4 h-4 mr-1" /> Q&A ({qaPairs.length})
                                 </Button>
                             </div>
 
@@ -792,11 +843,53 @@ When finished, say: "Thank you for your time. This concludes our interview."
                                                                     if (prev.includes(lastAskedIndex)) return prev;
                                                                     return [...prev, lastAskedIndex];
                                                                 });
+                                                                
+                                                                // Save Q&A pair
+                                                                if (interviewData?._id) {
+                                                                    const answerText = userTranscriptBuffer.current.trim();
+                                                                    if (answerText) {
+                                                                        // Use predefined question if available, otherwise use current question text
+                                                                        const questionToSave = interviewData.interviewQuestions?.[lastAskedIndex]?.question || currentQuestionText || 'Question';
+                                                                        
+                                                                        const newQAPair = {
+                                                                            question: questionToSave,
+                                                                            answer: answerText,
+                                                                            questionIndex: lastAskedIndex,
+                                                                            timestamp: Date.now()
+                                                                        };
+                                                                        setQAPairs(prev => {
+                                                                            // Avoid duplicates
+                                                                            const exists = prev.some(qa => qa.questionIndex === lastAskedIndex);
+                                                                            if (exists) return prev;
+                                                                            return [...prev, newQAPair];
+                                                                        });
+                                                                        saveQAPair({
+                                                                            recordId: interviewData._id,
+                                                                            question: questionToSave,
+                                                                            answer: answerText,
+                                                                            questionIndex: lastAskedIndex
+                                                                        }).catch(err => console.error('Failed to save Q&A:', err));
+                                                                    }
+                                                                }
                                                             }
                                         userTranscriptBuffer.current = '';
                                     }
                                                     } else {
                                     assistantTranscriptBuffer.current += transcript;
+                                                        // Try to match with predefined questions
+                                                        const currentQIndex = conversationManager?.getCurrentQuestionIndex() || 0;
+                                                        if (interviewData?.interviewQuestions && currentQIndex > 0 && currentQIndex <= interviewData.interviewQuestions.length) {
+                                                            const predefinedQ = interviewData.interviewQuestions[currentQIndex - 1];
+                                                            if (predefinedQ?.question) {
+                                                                setCurrentQuestionText(predefinedQ.question);
+                                                            }
+                                                        } else if (transcript.includes('?') && transcript.length > 15) {
+                                            // Fallback: use transcript if it looks like a question
+                                            const questionText = assistantTranscriptBuffer.current.trim();
+                                            if (questionText && questionText.length > 10) {
+                                                setCurrentQuestionText(questionText);
+                                            }
+                                        }
                                                         if (transcript.match(/[.?!]$/) && transcript.includes('?')) {
                                             conversationManager?.getConversation().push({
                                                 from: 'bot',
