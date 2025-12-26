@@ -1,7 +1,7 @@
 "use client"
 
 import { useClerk, useUser } from '@clerk/nextjs';
-import { useConvex, useQuery } from 'convex/react';
+import { useConvex } from 'convex/react';
 import {
     Bell,
     CalendarClock,
@@ -239,9 +239,115 @@ function Dashboard() {
         return [...sortedInterviews].filter((c) => c.candidateName && c.candidateName.trim().length > 0);
     }, [sortedInterviews]);
 
-    // Your Interview: Show only template interviews (without candidateName)
+    // Your Interview: Group template interviews by jobDescription
+    // Step 1: Filter template interviews (no candidateName)
+    // Step 2: Group by jobDescription - ONE card per unique JD
     const highlightedInterviews = useMemo(() => {
-        return [...sortedInterviews].filter((c) => !c.candidateName || c.candidateName.trim().length === 0);
+        // Step 1: Filter only template interviews (those without candidateName)
+        const templateInterviews = sortedInterviews.filter(interview => {
+            // Template = no candidateName or empty candidateName
+            return !interview.candidateName || interview.candidateName.trim().length === 0;
+        });
+        
+        // Step 2: Normalize jobDescription for grouping (handles case/whitespace differences)
+        const normalizeJobDescription = (jd: string | null | undefined): string => {
+            if (!jd || typeof jd !== 'string') return '';
+            // Simple normalization: trim whitespace and convert to lowercase
+            return jd.trim().toLowerCase();
+        };
+        
+        // Step 3: Group interviews by normalized jobDescription
+        const groupedByJD = new Map<string, InterviewData[]>();
+        
+        console.log('🔍 DEBUG: Starting grouping process');
+        console.log('📋 Template interviews found:', templateInterviews.length);
+        console.log('📋 Sample template data:', templateInterviews.slice(0, 5).map(i => ({
+            id: String(i._id),
+            jobTitle: i.jobTitle,
+            jobDescription: i.jobDescription,
+            jobDescriptionType: typeof i.jobDescription,
+            jobDescriptionValue: JSON.stringify(i.jobDescription),
+            candidateName: i.candidateName
+        })));
+        
+        templateInterviews.forEach(interview => {
+            const rawJD = interview.jobDescription;
+            const normalizedJD = normalizeJobDescription(rawJD);
+            
+            // Use normalized JD as key, or unique ID if no JD
+            const groupKey = normalizedJD && normalizedJD.length > 0 
+                ? normalizedJD 
+                : `no-jd-${String(interview._id)}`;
+            
+            console.log('🔑 Processing interview:', {
+                id: String(interview._id),
+                rawJD: rawJD,
+                normalizedJD: normalizedJD,
+                groupKey: groupKey
+            });
+            
+            if (!groupedByJD.has(groupKey)) {
+                groupedByJD.set(groupKey, []);
+            }
+            groupedByJD.get(groupKey)!.push(interview);
+        });
+        
+        console.log('📊 Groups created:', Array.from(groupedByJD.entries()).map(([key, interviews]) => ({
+            groupKey: key,
+            count: interviews.length,
+            interviewIds: interviews.map(i => String(i._id)),
+            rawJDs: interviews.map(i => i.jobDescription),
+            normalizedJDs: interviews.map(i => normalizeJobDescription(i.jobDescription))
+        })));
+        
+        // Step 4: Create one representative interview per group
+        const groupedResult: Array<InterviewData & { _groupCount?: number }> = [];
+        
+        groupedByJD.forEach((interviews, normalizedJD) => {
+            if (interviews.length > 0) {
+                // Pick most recent interview as representative
+                const sorted = interviews.sort((a, b) => {
+                    const aTime = a.completedAt ?? a.startedAt ?? 0;
+                    const bTime = b.completedAt ?? b.startedAt ?? 0;
+                    return bTime - aTime;
+                });
+                
+                // Use the first interview that has valid _id and jobDescription
+                const representative = sorted.find(i => i._id && i.jobDescription) || sorted[0];
+                
+                if (!representative || !representative._id) {
+                    console.warn('⚠️ Skipping group - no valid representative interview', normalizedJD);
+                    return;
+                }
+                
+                groupedResult.push({
+                    ...representative,
+                    _groupCount: interviews.length, // Track how many interviews in this group
+                    jobDescription: representative.jobDescription || null // Preserve original JD for query
+                });
+                
+                if (interviews.length > 1) {
+                    console.log(`✅ Grouped ${interviews.length} interviews with JD: "${normalizedJD}"`);
+                }
+            }
+        });
+        
+        console.log('🎯 Final result:', {
+            totalCards: groupedResult.length,
+            groupsWithMultiple: groupedResult.filter(r => (r as any)._groupCount > 1).length,
+            allCards: groupedResult.map(r => ({
+                id: String(r._id),
+                jobDescription: r.jobDescription,
+                groupCount: (r as any)._groupCount
+            }))
+        });
+        
+        // Step 5: Sort by most recent
+        return groupedResult.sort((a, b) => {
+            const aTime = a.completedAt ?? a.startedAt ?? 0;
+            const bTime = b.completedAt ?? b.startedAt ?? 0;
+            return bTime - aTime;
+        });
     }, [sortedInterviews]);
 
     const activeInterviewCount = useMemo(
@@ -745,9 +851,20 @@ function Dashboard() {
                                             </div>
                                         ))
                                         : highlightedInterviews.length > 0
-                                            ? highlightedInterviews.map((interview) => (
+                                            ? highlightedInterviews.map((interview) => {
+                                                // Create stable key based on normalized JD (same logic as grouping)
+                                                const normalize = (jd: string | null | undefined): string => {
+                                                    if (!jd || typeof jd !== 'string') return '';
+                                                    return jd.trim().toLowerCase();
+                                                };
+                                                const groupKey = interview.jobDescription 
+                                                    ? `jd-${normalize(interview.jobDescription)}` 
+                                                    : `no-jd-${String(interview._id)}`;
+                                                const groupCount = (interview as any)._groupCount || 1;
+                                                
+                                                return (
                                                 <div
-                                                    key={String(interview._id)}
+                                                    key={groupKey}
                                                     className={cn(
                                                         'group flex flex-col gap-4 rounded-2xl border p-5 transition hover:shadow-md snap-start',
                                                         isDark
@@ -757,7 +874,7 @@ function Dashboard() {
                                                 >
                                                     <div className="flex items-start justify-between gap-3">
                                                         <div className="min-w-0 flex-1">
-                                                            <div className="mb-1 flex items-center gap-2">
+                                                            <div className="mb-1 flex items-center gap-2 flex-wrap">
                                                                 <div
                                                                     className={cn(
                                                                         'size-2 rounded-full',
@@ -771,6 +888,16 @@ function Dashboard() {
                                                                 <span className={cn('text-xs font-medium uppercase tracking-wide', isDark ? 'text-gray-400' : 'text-gray-500')}>
                                                                     {interview.status?.replace('_', ' ') || 'Unknown'}
                                                                 </span>
+                                                                {groupCount > 1 && (
+                                                                    <span className={cn(
+                                                                        'text-xs px-2 py-0.5 rounded-full font-medium',
+                                                                        isDark 
+                                                                            ? 'bg-blue-500/20 text-blue-300' 
+                                                                            : 'bg-blue-100 text-blue-600'
+                                                                    )}>
+                                                                        {groupCount} interviews
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                             <h4 className={cn('line-clamp-2 text-base font-semibold leading-tight', isDark ? 'text-gray-100' : 'text-gray-900')}>
                                                                 {interview.jobTitle ?? 'Untitled Interview'}
@@ -793,8 +920,13 @@ function Dashboard() {
                                                             onClick={(e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
-                                                                setSelectedInterview(interview);
-                                                                setIsStudentListOpen(true);
+                                                                // Ensure interview has required fields before setting
+                                                                if (interview && interview._id && interview.jobDescription) {
+                                                                    setSelectedInterview(interview);
+                                                                    setIsStudentListOpen(true);
+                                                                } else {
+                                                                    console.error('Invalid interview selected:', interview);
+                                                                }
                                                             }}
                                                             className={cn(
                                                                 'h-8 rounded-full px-4 text-xs font-semibold',
@@ -807,7 +939,8 @@ function Dashboard() {
                                                         </Button>
                                                     </div>
                                                 </div>
-                                            ))
+                                                );
+                                            })
                                             : (
                                                 <div
                                                     className={cn(
@@ -975,8 +1108,8 @@ function Dashboard() {
                     </DialogHeader>
                     
                     <StudentListContent 
-                        interview={selectedInterview}
-                        userId={userId}
+                        interview={selectedInterview && selectedInterview._id && selectedInterview.jobDescription ? selectedInterview : null}
+                        allCandidates={candidatePreviews}
                         isDark={isDark}
                         onStudentClick={(student) => {
                             setSelectedCandidate(student);
@@ -993,23 +1126,39 @@ function Dashboard() {
 // Student List Component
 function StudentListContent({ 
     interview, 
-    userId, 
+    allCandidates,
     isDark, 
     onStudentClick 
 }: { 
     interview: InterviewData | null; 
-    userId: string | undefined;
+    allCandidates: InterviewData[];
     isDark: boolean;
     onStudentClick: (student: InterviewData) => void;
 }) {
-    const students = useQuery(
-        api.Interview.GetStudentsByInterview,
-        interview && userId ? {
-            interviewId: interview._id,
-            ownerId: userId as any
-        } : 'skip'
-    );
-
+    // Normalize jobDescription for comparison (same logic as grouping)
+    const normalizeJobDescription = (jd: string | null | undefined): string => {
+        if (!jd || typeof jd !== 'string') return '';
+        return jd.trim().toLowerCase();
+    };
+    
+    // Filter candidates by matching jobDescription
+    const studentsList = useMemo(() => {
+        if (!interview || !interview.jobDescription) {
+            return [];
+        }
+        
+        const targetJD = normalizeJobDescription(interview.jobDescription);
+        if (!targetJD || targetJD.length === 0) {
+            return [];
+        }
+        
+        // Filter candidates that match the jobDescription
+        return allCandidates.filter(candidate => {
+            if (!candidate.jobDescription) return false;
+            const candidateJD = normalizeJobDescription(candidate.jobDescription);
+            return candidateJD === targetJD;
+        });
+    }, [interview, allCandidates]);
 
     const formatRelativeTime = (timestamp?: number | null) => {
         if (!timestamp) return 'Not started';
@@ -1035,7 +1184,7 @@ function StudentListContent({
         return `${years} yr${years === 1 ? '' : 's'} ago`;
     };
 
-    if (!interview || !userId) {
+    if (!interview || !interview.jobDescription) {
         return (
             <div className={cn('text-center py-8', isDark ? 'text-gray-400' : 'text-gray-500')}>
                 <p className="text-sm">No interview selected</p>
@@ -1043,20 +1192,8 @@ function StudentListContent({
         );
     }
 
-    if (students === undefined) {
-        return (
-            <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, idx) => (
-                    <div key={idx} className={cn('rounded-lg border p-4', isDark ? 'border-white/10 bg-[#1A1A1A]' : 'border-gray-200 bg-gray-50')}>
-                        <Skeleton className="h-4 w-32 mb-2" />
-                        <Skeleton className="h-3 w-24" />
-                    </div>
-                ))}
-            </div>
-        );
-    }
-
-    if (!Array.isArray(students) || students.length === 0) {
+    // Show empty state if no students found
+    if (!studentsList || studentsList.length === 0) {
         return (
             <div className={cn('text-center py-8', isDark ? 'text-gray-400' : 'text-gray-500')}>
                 <p className="text-sm">No students have taken interviews with this Job Description yet.</p>
@@ -1068,9 +1205,9 @@ function StudentListContent({
     return (
         <div className="space-y-3 mt-4">
             <div className={cn('text-sm mb-2', isDark ? 'text-gray-300' : 'text-gray-700')}>
-                <span className="font-semibold">{students.length}</span> student{students.length !== 1 ? 's' : ''} found
+                <span className="font-semibold">{studentsList.length}</span> student{studentsList.length !== 1 ? 's' : ''} found
             </div>
-            {students.map((student) => (
+            {studentsList.map((student) => (
                 <button
                     key={String(student._id)}
                     type="button"

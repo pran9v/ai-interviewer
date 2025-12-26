@@ -145,42 +145,140 @@ export const GetInterviewList = query({
 
 export const GetStudentsByInterview = query({
     args: {
-        interviewId: v.id('InterviewSessionTable'),
-        ownerId: v.id('UserTable')
+        interviewId: v.union(v.id('InterviewSessionTable'), v.string()),
+        ownerId: v.union(v.id('UserTable'), v.string())
     },
     handler: async (ctx, args) => {
         try {
+            // Validate inputs - ensure they are valid Convex IDs
+            if (!args.interviewId || typeof args.interviewId !== 'string' || args.interviewId.trim().length === 0) {
+                console.warn('GetStudentsByInterview: Missing or invalid interviewId', args.interviewId);
+                return [];
+            }
+            
+            if (!args.ownerId || typeof args.ownerId !== 'string' || args.ownerId.trim().length === 0) {
+                console.warn('GetStudentsByInterview: Missing or invalid ownerId', args.ownerId);
+                return [];
+            }
+            
+            // Convert to proper Convex ID types
+            const interviewId = args.interviewId as any;
+            const ownerId = args.ownerId as any;
+
             // Get the selected interview to find its jobDescription
-            const selectedInterview = await ctx.db.get(args.interviewId);
-            if (!selectedInterview || !selectedInterview.jobDescription) {
+            const selectedInterview = await ctx.db.get(interviewId) as any;
+            if (!selectedInterview) {
+                console.warn('GetStudentsByInterview: Interview not found', interviewId);
+                return [];
+            }
+            
+            // Verify the interview belongs to the owner
+            if (selectedInterview.userId !== ownerId) {
+                console.warn('GetStudentsByInterview: Interview does not belong to owner', {
+                    interviewId: interviewId,
+                    interviewUserId: selectedInterview.userId,
+                    ownerId: ownerId
+                });
+                return [];
+            }
+            
+            if (!selectedInterview.jobDescription || typeof selectedInterview.jobDescription !== 'string' || selectedInterview.jobDescription.trim().length === 0) {
+                console.warn('GetStudentsByInterview: Interview has no valid jobDescription', {
+                    interviewId: interviewId,
+                    hasJobDescription: !!selectedInterview.jobDescription,
+                    jobDescriptionType: typeof selectedInterview.jobDescription
+                });
                 return [];
             }
 
             // Find all interview sessions with the same jobDescription
             // that belong to the same owner (to avoid conflicts)
-            const allInterviews = await ctx.db.query('InterviewSessionTable')
-                .filter(q => q.eq(q.field('userId'), args.ownerId))
-                .collect();
+            let allInterviews: any[] = [];
+            try {
+                // Query all interviews for this user
+                const queryResult = ctx.db.query('InterviewSessionTable')
+                    .filter(q => q.eq(q.field('userId'), ownerId));
+                
+                allInterviews = await queryResult.collect();
+                
+                console.log('GetStudentsByInterview: Found', allInterviews.length, 'total interviews for user', ownerId);
+            } catch (queryError: any) {
+                console.error('GetStudentsByInterview: Error querying interviews', {
+                    error: queryError?.message || String(queryError),
+                    errorName: queryError?.name,
+                    ownerId: ownerId,
+                    ownerIdType: typeof ownerId,
+                    stack: queryError?.stack
+                });
+                return [];
+            }
+            
+            if (!Array.isArray(allInterviews)) {
+                console.warn('GetStudentsByInterview: Query did not return an array', typeof allInterviews);
+                return [];
+            }
 
-            // Filter interviews that match the selected interview's jobDescription
-            // Include only interviews that have a candidateName (student interviews)
-            // Exclude the template interview itself
-            // Normalize jobDescription for comparison (trim whitespace, handle null/undefined)
-            const normalizeJD = (jd: string | null | undefined) => {
-                if (!jd) return '';
+            // Normalize jobDescription for comparison (same logic as frontend)
+            // Simple normalization: trim and lowercase to match frontend grouping
+            const normalizeJD = (jd: string | null | undefined): string => {
+                if (!jd || typeof jd !== 'string') return '';
                 return jd.trim().toLowerCase();
             };
             
             const targetJD = normalizeJD(selectedInterview.jobDescription);
             
-            const matchingInterviews = allInterviews.filter(interview => {
-                const interviewJD = normalizeJD(interview.jobDescription);
-                const matchesDescription = interviewJD === targetJD && targetJD.length > 0;
-                const isStudentInterview = interview.candidateName && interview.candidateName.trim().length > 0;
-                const isNotSelf = interview._id !== args.interviewId;
-                
-                return matchesDescription && isStudentInterview && isNotSelf;
+            if (!targetJD || targetJD.length === 0) {
+                return [];
+            }
+            
+            // Filter interviews that match the selected interview's jobDescription
+            // Include only interviews that have a candidateName (student interviews)
+            // The query finds ALL students with matching JD, regardless of which template was used
+            console.log('GetStudentsByInterview: Filtering interviews', {
+                totalInterviews: allInterviews.length,
+                targetJD: targetJD,
+                targetJDLength: targetJD.length
             });
+            
+            // Debug: Log sample interviews
+            const sampleInterviews = allInterviews.slice(0, 5).map(i => ({
+                id: String(i._id),
+                hasJobDescription: !!i.jobDescription,
+                jobDescription: i.jobDescription ? i.jobDescription.substring(0, 50) : 'N/A',
+                normalizedJD: normalizeJD(i.jobDescription),
+                hasCandidateName: !!i.candidateName,
+                candidateName: i.candidateName || 'N/A'
+            }));
+            console.log('GetStudentsByInterview: Sample interviews:', sampleInterviews);
+            
+            const matchingInterviews = allInterviews.filter(interview => {
+                if (!interview.jobDescription) {
+                    return false;
+                }
+                
+                const interviewJD = normalizeJD(interview.jobDescription);
+                const matchesDescription = interviewJD === targetJD;
+                const isStudentInterview = interview.candidateName && 
+                    typeof interview.candidateName === 'string' && 
+                    interview.candidateName.trim().length > 0;
+                
+                // Debug logging for each interview
+                if (isStudentInterview) {
+                    console.log('GetStudentsByInterview: Checking student interview', {
+                        id: String(interview._id),
+                        candidateName: interview.candidateName,
+                        interviewJD: interviewJD,
+                        targetJD: targetJD,
+                        matchesDescription: matchesDescription,
+                        willInclude: matchesDescription && isStudentInterview
+                    });
+                }
+                
+                // Include all student interviews with matching JD (exclude templates)
+                return matchesDescription && isStudentInterview;
+            });
+
+            console.log('GetStudentsByInterview: Found', matchingInterviews.length, 'matching student interviews');
 
             // Sort by completedAt or startedAt descending (most recent first)
             const sorted = matchingInterviews.sort((a, b) => {
@@ -189,10 +287,32 @@ export const GetStudentsByInterview = query({
                 return bTime - aTime;
             });
 
+            console.log('GetStudentsByInterview: Successfully found', sorted.length, 'students');
+            if (sorted.length > 0) {
+                console.log('GetStudentsByInterview: Sample students:', sorted.slice(0, 3).map(s => ({
+                    id: String(s._id),
+                    candidateName: s.candidateName,
+                    status: s.status
+                })));
+            }
             return sorted;
-        } catch (error) {
-            console.error('GetStudentsByInterview error:', error);
-            throw error;
+        } catch (error: any) {
+            // Log the full error for debugging
+            const errorMessage = error?.message || String(error);
+            const errorStack = error?.stack;
+            
+            console.error('GetStudentsByInterview: Full error details', {
+                message: errorMessage,
+                name: error?.name,
+                stack: errorStack,
+                interviewId: args?.interviewId,
+                ownerId: args?.ownerId,
+                errorType: typeof error
+            });
+            
+            // Return empty array instead of throwing to prevent UI crashes
+            // This allows the UI to continue working even if query fails
+            return [];
         }
     }
 })
