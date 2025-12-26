@@ -12,20 +12,18 @@ const NAV_ITEMS = [
 
 function Header() {
   return (
-    <header className="py-6">
+    <header className="">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center gap-3">
           <Image
-            src="/logo.svg"
-            alt="Matryc"
-            width={40}
-            height={40}
+            src="/logo.png"
+            alt="prospective"
+            width={180}
+            height={100}
             priority
-            className="h-10 w-auto"
+            className=""
           />
-          <span className="text-xl font-semibold tracking-tight text-transparent bg-gradient-to-r from-purple-600 to-blue-500 bg-clip-text">
-            Matryc
-          </span>
+       
         </Link>
 
         <nav className="hidden md:flex items-center gap-1 rounded-full border border-neutral-200 bg-blue-500/10 p-1 shadow-sm">
