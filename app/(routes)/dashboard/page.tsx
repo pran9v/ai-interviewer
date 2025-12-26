@@ -453,19 +453,6 @@ function Dashboard() {
                                 <span className={cn('text-xs truncate', isDark ? 'text-gray-400' : 'text-gray-500')}>Program Coordinator</span>
                             </div>
                         </div>
-                        <Button
-                            variant="ghost"
-                            className={cn(
-                                'flex items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold transition-colors duration-300',
-                                isDark
-                                    ? 'bg-white/5 text-red-300 hover:bg-white/10'
-                                    : 'bg-white text-[#1E90FF] border border-[#B5DAFF] shadow-sm hover:bg-[#F1F7FF]',
-                            )}
-                            onClick={handleSignOut}
-                        >
-                            <LogOut className="size-4" />
-                            Log out
-                        </Button>
                     </div>
 
                     <nav className="flex flex-col gap-2">
