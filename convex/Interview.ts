@@ -117,11 +117,111 @@ export const GetInterviewList = query({
         uid: v.id('UserTable')
     },
     handler: async (ctx, args) => {
-        const result = await ctx.db.query('InterviewSessionTable')
-            .filter(q => q.eq(q.field('userId'), args.uid))
-            .order('desc')
-            .collect();
+        try {
+           
+            
+            // Query all interviews for this user
+            const result = await ctx.db.query('InterviewSessionTable')
+                .filter(q => q.eq(q.field('userId'), args.uid))
+                .collect();
+            
+          
+            
+            // Sort by completedAt or startedAt descending (most recent first)
+            const sorted = result.sort((a, b) => {
+                const aTime = a.completedAt ?? a.startedAt ?? 0;
+                const bTime = b.completedAt ?? b.startedAt ?? 0;
+                return bTime - aTime;
+            });
+            
+            console.log('GetInterviewList returning', sorted.length, 'sorted interviews');
+            return sorted;
+        } catch (error) {
+            console.error('GetInterviewList error:', error);
+            throw error;
+        }
+    }
+})
 
-        return result;
+export const GetStudentsByInterview = query({
+    args: {
+        interviewId: v.id('InterviewSessionTable'),
+        ownerId: v.id('UserTable')
+    },
+    handler: async (ctx, args) => {
+        try {
+            // Get the selected interview to find its jobDescription
+            const selectedInterview = await ctx.db.get(args.interviewId);
+            if (!selectedInterview || !selectedInterview.jobDescription) {
+                return [];
+            }
+
+            // Find all interview sessions with the same jobDescription
+            // that belong to the same owner (to avoid conflicts)
+            const allInterviews = await ctx.db.query('InterviewSessionTable')
+                .filter(q => q.eq(q.field('userId'), args.ownerId))
+                .collect();
+
+            // Filter interviews that match the selected interview's jobDescription
+            // Include only interviews that have a candidateName (student interviews)
+            // Exclude the template interview itself
+            // Normalize jobDescription for comparison (trim whitespace, handle null/undefined)
+            const normalizeJD = (jd: string | null | undefined) => {
+                if (!jd) return '';
+                return jd.trim().toLowerCase();
+            };
+            
+            const targetJD = normalizeJD(selectedInterview.jobDescription);
+            
+            const matchingInterviews = allInterviews.filter(interview => {
+                const interviewJD = normalizeJD(interview.jobDescription);
+                const matchesDescription = interviewJD === targetJD && targetJD.length > 0;
+                const isStudentInterview = interview.candidateName && interview.candidateName.trim().length > 0;
+                const isNotSelf = interview._id !== args.interviewId;
+                
+                return matchesDescription && isStudentInterview && isNotSelf;
+            });
+
+            // Sort by completedAt or startedAt descending (most recent first)
+            const sorted = matchingInterviews.sort((a, b) => {
+                const aTime = a.completedAt ?? a.startedAt ?? 0;
+                const bTime = b.completedAt ?? b.startedAt ?? 0;
+                return bTime - aTime;
+            });
+
+            return sorted;
+        } catch (error) {
+            console.error('GetStudentsByInterview error:', error);
+            throw error;
+        }
+    }
+})
+
+export const SaveQAPair = mutation({
+    args: {
+        recordId: v.id('InterviewSessionTable'),
+        question: v.string(),
+        answer: v.string(),
+        questionIndex: v.number()
+    },
+    handler: async (ctx, args) => {
+        const record = await ctx.db.get(args.recordId);
+        if (!record) {
+            throw new Error('Interview record not found');
+        }
+
+        const existingQAPairs = record.qaPairs || [];
+        const updatedQAPairs = [...existingQAPairs, {
+            question: args.question,
+            answer: args.answer,
+            questionIndex: args.questionIndex,
+            timestamp: Date.now()
+        }];
+
+        await ctx.db.patch(args.recordId, {
+            qaPairs: updatedQAPairs
+        });
+
+        return { success: true };
     }
 })

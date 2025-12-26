@@ -27,6 +27,7 @@ export default defineSchema({
         videoRequired: v.optional(v.boolean()),
         feedback: v.optional(v.any()),
         conversation: v.optional(v.any()), // Conversation history
+        qaPairs: v.optional(v.any()), // Question-Answer pairs
         currentQuestionIndex: v.optional(v.number()),
         startedAt: v.optional(v.number()),
         completedAt: v.optional(v.number()),

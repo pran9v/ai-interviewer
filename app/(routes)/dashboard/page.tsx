@@ -1,11 +1,12 @@
 "use client"
 
 import { useClerk, useUser } from '@clerk/nextjs';
-import { useConvex } from 'convex/react';
+import { useConvex, useQuery } from 'convex/react';
 import {
     Bell,
     CalendarClock,
     CalendarDays,
+    ChevronRight,
     GraduationCap,
     LayoutDashboard,
     LogOut,
@@ -51,7 +52,7 @@ const navItems: NavItem[] = [
 ];
 
 const PRIMARY_COLOR = '#1E90FF';
-    const SIDEBAR_GRADIENT = 'radial-gradient(120% 120% at 50% -30%, rgba(133, 200, 255, 0.55) 0%, rgba(255, 255, 255, 0.9) 55%)';
+const SIDEBAR_GRADIENT = 'radial-gradient(120% 120% at 50% -30%, rgba(133, 200, 255, 0.55) 0%, rgba(255, 255, 255, 0.9) 55%)';
 
 type StatCardProps = {
     icon: LucideIcon;
@@ -150,6 +151,10 @@ function Dashboard() {
     const isDark = themeChoice === 'dark';
     const [selectedCandidate, setSelectedCandidate] = useState<InterviewData | null>(null);
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+    const [selectedInterview, setSelectedInterview] = useState<InterviewData | null>(null);
+    const [isStudentListOpen, setIsStudentListOpen] = useState(false);
+    const [studentList, setStudentList] = useState<InterviewData[]>([]);
+    const [loadingStudents, setLoadingStudents] = useState(false);
 
     const handleSignOut = useCallback(async () => {
         try {
@@ -185,23 +190,32 @@ function Dashboard() {
     useEffect(() => {
         if (!userId) {
             if (isUserLoaded) {
-            setLoading(false);
+                setLoading(false);
             }
             return;
         }
 
         const fetchInterviews = async () => {
-        setLoading(true);
-        try {
-            const result = await convex.query(api.Interview.GetInterviewList, {
+            setLoading(true);
+            try {
+                const result = await convex.query(api.Interview.GetInterviewList, {
                     uid: userId as any, // TODO: narrow Convex type
-            });
-                setInterviewList((result ?? []) as InterviewData[]);
-        } catch (error) {
-            console.error('Error fetching interview list:', error);
+                });
+
+
+                if (Array.isArray(result)) {
+
+                    setInterviewList(result as InterviewData[]);
+                } else {
+
+                    setInterviewList([]);
+                }
+            } catch (error) {
+                console.error('Error fetching interview list:', error);
+                setInterviewList([]);
             } finally {
-        setLoading(false);
-    }
+                setLoading(false);
+            }
         };
 
         fetchInterviews();
@@ -220,13 +234,15 @@ function Dashboard() {
         });
     }, [interviewList]);
 
-    // Sort interviews to show most recent candidates first; include all for scrollable list
+    // Latest Candidates: Show only student interviews (with candidateName)
     const candidatePreviews = useMemo(() => {
-        return [...sortedInterviews].filter((c) => c.candidateName || c.jobTitle);
+        return [...sortedInterviews].filter((c) => c.candidateName && c.candidateName.trim().length > 0);
     }, [sortedInterviews]);
 
-    // Use the same data for highlights
-    const highlightedInterviews = candidatePreviews;
+    // Your Interview: Show only template interviews (without candidateName)
+    const highlightedInterviews = useMemo(() => {
+        return [...sortedInterviews].filter((c) => !c.candidateName || c.candidateName.trim().length === 0);
+    }, [sortedInterviews]);
 
     const activeInterviewCount = useMemo(
         () => interviewList.filter((item) => item.status === 'in_progress').length,
@@ -289,9 +305,9 @@ function Dashboard() {
     );
     const heroStyle = !isDark
         ? {
-              background:
-                  'radial-gradient(120% 120% at 0% 0%, rgba(133, 200, 255, 0.55) 0%, rgba(255, 255, 255, 0.9) 55%)',
-          }
+            background:
+                'radial-gradient(120% 120% at 0% 0%, rgba(133, 200, 255, 0.55) 0%, rgba(255, 255, 255, 0.9) 55%)',
+        }
         : undefined;
 
     return (
@@ -331,6 +347,19 @@ function Dashboard() {
                                 <span className={cn('text-xs truncate', isDark ? 'text-gray-400' : 'text-gray-500')}>Program Coordinator</span>
                             </div>
                         </div>
+                        <Button
+                            variant="ghost"
+                            className={cn(
+                                'flex items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold transition-colors duration-300',
+                                isDark
+                                    ? 'bg-white/5 text-red-300 hover:bg-white/10'
+                                    : 'bg-white text-[#1E90FF] border border-[#B5DAFF] shadow-sm hover:bg-[#F1F7FF]',
+                            )}
+                            onClick={handleSignOut}
+                        >
+                            <LogOut className="size-4" />
+                            Log out
+                        </Button>
                     </div>
 
                     <nav className="flex flex-col gap-2">
@@ -476,32 +505,32 @@ function Dashboard() {
                                             isDark ? 'border border-white/10 bg-white/10 shadow-none' : 'bg-white/85 border border-white/60 shadow-lg',
                                         )}
                                     >
-                                    <button
-                                        type="button"
-                                        onClick={() => setThemeChoice('light')}
-                                        className={cn(
-                                            'flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold transition',
-                                            !isDark
-                                            ? 'bg-[#1E90FF] text-white shadow'
-                                                : 'text-gray-400 hover:bg-white/10',
-                                        )}
-                                    >
-                                        <Sun className="size-4" />
-                                        <span className="hidden md:inline">Light</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setThemeChoice('dark')}
-                                        className={cn(
-                                            'flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold transition',
-                                            isDark
-                                            ? 'bg-[#1E90FF] text-white shadow'
-                                            : 'text-[#1E90FF] hover:bg-[#E6F3FF]',
-                                        )}
-                                    >
-                                        <Moon className="size-4" />
-                                        <span className="hidden md:inline">Dark</span>
-                                    </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setThemeChoice('light')}
+                                            className={cn(
+                                                'flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold transition',
+                                                !isDark
+                                                    ? 'bg-[#1E90FF] text-white shadow'
+                                                    : 'text-gray-400 hover:bg-white/10',
+                                            )}
+                                        >
+                                            <Sun className="size-4" />
+                                            <span className="hidden md:inline">Light</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setThemeChoice('dark')}
+                                            className={cn(
+                                                'flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold transition',
+                                                isDark
+                                                    ? 'bg-[#1E90FF] text-white shadow'
+                                                    : 'text-[#1E90FF] hover:bg-[#E6F3FF]',
+                                            )}
+                                        >
+                                            <Moon className="size-4" />
+                                            <span className="hidden md:inline">Dark</span>
+                                        </button>
                                     </div>
 
                                     <Button
@@ -602,24 +631,24 @@ function Dashboard() {
                                     <div className="mt-6 min-h-[320px] max-h-[320px] space-y-4 overflow-y-auto pr-1 snap-y snap-mandatory">
                                         {loading
                                             ? Array.from({ length: 4 }).map((_, index) => (
-                                                  <div
-                                                      key={`candidate-skeleton-${index}`}
-                                                      className={cn(
-                                                          'flex items-center justify-between gap-4 rounded-2xl border p-4 transition-colors duration-300 snap-start',
-                                                          isDark
-                                                              ? 'border-white/10 bg-[#1A1A1A]'
-                                                              : 'border-[#D7E7FF] bg-[#F3F8FF]',
-                                                      )}
-                                                  >
-                                                      <div className="flex-1 space-y-2">
-                                                          <Skeleton className="h-4 w-32" />
-                                                          <Skeleton className="h-3 w-48" />
-                                                      </div>
-                                                      <Skeleton className="h-9 w-20 rounded-full" />
-                                                  </div>
-                                              ))
+                                                <div
+                                                    key={`candidate-skeleton-${index}`}
+                                                    className={cn(
+                                                        'flex items-center justify-between gap-4 rounded-2xl border p-4 transition-colors duration-300 snap-start',
+                                                        isDark
+                                                            ? 'border-white/10 bg-[#1A1A1A]'
+                                                            : 'border-[#D7E7FF] bg-[#F3F8FF]',
+                                                    )}
+                                                >
+                                                    <div className="flex-1 space-y-2">
+                                                        <Skeleton className="h-4 w-32" />
+                                                        <Skeleton className="h-3 w-48" />
+                                                    </div>
+                                                    <Skeleton className="h-9 w-20 rounded-full" />
+                                                </div>
+                                            ))
                                             : candidatePreviews.length > 0
-                                              ? candidatePreviews.map((candidate) => (
+                                                ? candidatePreviews.map((candidate) => (
                                                     <div
                                                         key={String(candidate._id)}
                                                         className={cn(
@@ -661,18 +690,18 @@ function Dashboard() {
                                                         </Button>
                                                     </div>
                                                 ))
-                                              : (
-                                                  <div
-                                                      className={cn(
-                                                          'rounded-2xl border border-dashed p-10 text-center text-sm transition-colors duration-300',
-                                                          isDark
-                                                              ? 'border-white/20 bg-[#121212] text-gray-400'
-                                                          : 'border-[#D7E7FF] bg-[#F3F8FF] text-gray-500',
-                                                      )}
-                                                  >
-                                                      No candidates yet. Start by creating a new interview.
-                                                  </div>
-                                              )}
+                                                : (
+                                                    <div
+                                                        className={cn(
+                                                            'rounded-2xl border border-dashed p-10 text-center text-sm transition-colors duration-300',
+                                                            isDark
+                                                                ? 'border-white/20 bg-[#121212] text-gray-400'
+                                                                : 'border-[#D7E7FF] bg-[#F3F8FF] text-gray-500',
+                                                        )}
+                                                    >
+                                                        No candidates yet. Start by creating a new interview.
+                                                    </div>
+                                                )}
                                     </div>
                                 </section>
                             </div>
@@ -700,30 +729,30 @@ function Dashboard() {
                                 <div className="mt-6 flex min-h-[700px] max-h-[760px] flex-col gap-4 overflow-y-auto pr-1 pb-2 snap-y snap-mandatory">
                                     {loading
                                         ? Array.from({ length: 4 }).map((_, index) => (
-                                              <div
-                                                  key={`interview-skeleton-${index}`}
-                                                  className={cn(
-                                                      'rounded-2xl border p-4 transition-colors duration-300 snap-start',
-                                                      isDark ? 'border-white/10 bg-[#1A1A1A]' : 'border-gray-100 bg-white',
-                                                  )}
-                                              >
-                                                  <Skeleton className="h-4 w-40" />
-                                                  <Skeleton className="mt-2 h-3 w-24" />
-                                                  <div className="mt-4 flex items-center justify-between">
-                                                      <Skeleton className="h-8 w-20 rounded-full" />
-                                                      <Skeleton className="h-3 w-16" />
-                                                  </div>
-                                              </div>
-                                          ))
+                                            <div
+                                                key={`interview-skeleton-${index}`}
+                                                className={cn(
+                                                    'rounded-2xl border p-4 transition-colors duration-300 snap-start',
+                                                    isDark ? 'border-white/10 bg-[#1A1A1A]' : 'border-gray-100 bg-white',
+                                                )}
+                                            >
+                                                <Skeleton className="h-4 w-40" />
+                                                <Skeleton className="mt-2 h-3 w-24" />
+                                                <div className="mt-4 flex items-center justify-between">
+                                                    <Skeleton className="h-8 w-20 rounded-full" />
+                                                    <Skeleton className="h-3 w-16" />
+                                                </div>
+                                            </div>
+                                        ))
                                         : highlightedInterviews.length > 0
-                                          ? highlightedInterviews.map((interview) => (
+                                            ? highlightedInterviews.map((interview) => (
                                                 <div
                                                     key={String(interview._id)}
                                                     className={cn(
                                                         'group flex flex-col gap-4 rounded-2xl border p-5 transition hover:shadow-md snap-start',
                                                         isDark
                                                             ? 'border-white/10 bg-[#1A1A1A] hover:border-white/20 hover:shadow-black/30'
-                                                                : 'border-[#D7E7FF] bg-white hover:border-[#BEE3FF]',
+                                                            : 'border-[#D7E7FF] bg-white hover:border-[#BEE3FF]',
                                                     )}
                                                 >
                                                     <div className="flex items-start justify-between gap-3">
@@ -757,35 +786,40 @@ function Dashboard() {
                                                         <span className={cn('text-xs font-medium', isDark ? 'text-gray-500' : 'text-gray-400')}>
                                                             {formatRelativeTime(interview.completedAt ?? interview.startedAt)}
                                                         </span>
-                                                        <Link href={`/interview/${interview._id}`}>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                className={cn(
-                                                                    'h-8 rounded-full px-4 text-xs font-semibold',
-                                                                    isDark
-                                                                        ? 'border-white/20 text-white hover:bg-white/10'
-                                                                        : 'border-[#1E90FF] text-[#1E90FF] hover:bg-[#E6F3FF]',
-                                                                )}
-                                                            >
-                                                                Open
-                                                            </Button>
-                                                        </Link>
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                setSelectedInterview(interview);
+                                                                setIsStudentListOpen(true);
+                                                            }}
+                                                            className={cn(
+                                                                'h-8 rounded-full px-4 text-xs font-semibold',
+                                                                isDark
+                                                                    ? 'border-white/20 text-white hover:bg-white/10'
+                                                                    : 'border-[#1E90FF] text-[#1E90FF] hover:bg-[#E6F3FF]',
+                                                            )}
+                                                        >
+                                                            Open
+                                                        </Button>
                                                     </div>
                                                 </div>
                                             ))
-                                          : (
-                                              <div
-                                                  className={cn(
-                                                      'rounded-2xl border border-dashed p-10 text-center text-sm transition-colors duration-300 snap-start',
-                                                      isDark
-                                                          ? 'border-white/20 bg-[#121212] text-gray-400'
-                                                      : 'border-[#D7E7FF] bg-[#F3F8FF] text-gray-500',
-                                                  )}
-                                              >
-                                                  No interviews yet. Create one to get started.
-                                              </div>
-                                          )}
+                                            : (
+                                                <div
+                                                    className={cn(
+                                                        'rounded-2xl border border-dashed p-10 text-center text-sm transition-colors duration-300 snap-start',
+                                                        isDark
+                                                            ? 'border-white/20 bg-[#121212] text-gray-400'
+                                                            : 'border-[#D7E7FF] bg-[#F3F8FF] text-gray-500',
+                                                    )}
+                                                >
+                                                    No interviews yet. Create one to get started.
+                                                </div>
+                                            )}
                                 </div>
                             </section>
                         </div>
@@ -822,50 +856,267 @@ function Dashboard() {
                     </DialogHeader>
                     {(() => {
                         const fb = normalizeFeedback(selectedCandidate?.feedback);
-                        if (!fb) {
-                            return <p className={cn('text-sm', isDark ? 'text-gray-400' : 'text-gray-600')}>No feedback available yet.</p>;
-                        }
+                        const qaPairs = selectedCandidate?.qaPairs as Array<{ question: string; answer: string; questionIndex: number; timestamp: number }> | undefined;
+
                         return (
                             <div className="space-y-4">
-                                {fb.feedback && (
-                                    <div
-                                        className={cn(
-                                            'rounded-xl p-3 border',
-                                            isDark ? 'bg-[#111827] border-white/10 text-gray-100' : 'bg-gray-50 border-gray-100 text-gray-800',
-                                        )}
-                                    >
-                                        <p className={cn('text-xs font-semibold mb-1', isDark ? 'text-gray-300' : 'text-gray-700')}>Feedback overview</p>
-                                        <p className="text-sm whitespace-pre-wrap leading-relaxed">{fb.feedback}</p>
-                                    </div>
+                                {/* Feedback Section */}
+                                {!fb && (
+                                    <p className={cn('text-sm', isDark ? 'text-gray-400' : 'text-gray-600')}>No feedback available yet.</p>
                                 )}
-                                {fb.suggestions.length > 0 && (
-                                    <div
-                                        className={cn(
-                                            'rounded-xl p-3 border',
-                                            isDark ? 'bg-[#111827] border-white/10 text-gray-100' : 'bg-gray-50 border-gray-100 text-gray-800',
+                                {fb && (
+                                    <>
+                                        {fb.feedback && (
+                                            <div
+                                                className={cn(
+                                                    'rounded-xl p-3 border',
+                                                    isDark ? 'bg-[#111827] border-white/10 text-gray-100' : 'bg-gray-50 border-gray-100 text-gray-800',
+                                                )}
+                                            >
+                                                <p className={cn('text-xs font-semibold mb-1', isDark ? 'text-gray-300' : 'text-gray-700')}>Feedback overview</p>
+                                                <p className="text-sm whitespace-pre-wrap leading-relaxed">{fb.feedback}</p>
+                                            </div>
                                         )}
-                                    >
-                                        <p className={cn('text-xs font-semibold mb-1', isDark ? 'text-gray-300' : 'text-gray-700')}>Suggested follow-ups</p>
-                                        <ul className="space-y-2">
-                                            {fb.suggestions.map((s, idx) => (
-                                                <li
-                                                    key={`${idx}-${s}`}
-                                                    className={cn(
-                                                        'text-sm leading-relaxed rounded-lg border p-2',
-                                                        isDark ? 'bg-[#0B1220] border-white/10 text-gray-100' : 'bg-white border-gray-100 text-gray-800',
-                                                    )}
-                                                >
-                                                    {s}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
+
+                                        {/* Q&A Pairs Section - Below Feedback Overview */}
+                                        <div
+                                            className={cn(
+                                                'rounded-xl p-4 border',
+                                                isDark ? 'bg-[#111827] border-white/10 text-gray-100' : 'bg-gray-50 border-gray-100 text-gray-800',
+                                            )}
+                                        >
+                                            <p className={cn('text-sm font-semibold mb-3', isDark ? 'text-gray-300' : 'text-gray-700')}>
+                                                Questions & Answers {qaPairs && qaPairs.length > 0 ? `(${qaPairs.length})` : ''}
+                                            </p>
+                                            {qaPairs && qaPairs.length > 0 ? (
+                                                <div className="space-y-3 max-h-96 overflow-y-auto">
+                                                    {qaPairs.map((qa, idx) => (
+                                                        <div
+                                                            key={idx}
+                                                            className={cn(
+                                                                'rounded-lg border overflow-hidden',
+                                                                isDark ? 'border-white/10' : 'border-gray-200',
+                                                            )}
+                                                        >
+                                                            <div className={cn('p-3 border-b', isDark ? 'bg-[#0B1220] border-white/10' : 'bg-blue-50 border-blue-100')}>
+                                                                <div className="flex items-center justify-between mb-1">
+                                                                    <span className={cn('text-xs font-semibold', isDark ? 'text-blue-300' : 'text-blue-600')}>
+                                                                        Question {qa.questionIndex + 1}
+                                                                    </span>
+                                                                    <span className={cn('text-xs', isDark ? 'text-gray-400' : 'text-gray-500')}>
+                                                                        {new Date(qa.timestamp).toLocaleTimeString()}
+                                                                    </span>
+                                                                </div>
+                                                                <p className={cn('text-sm mt-1', isDark ? 'text-gray-200' : 'text-gray-900')}>{qa.question}</p>
+                                                            </div>
+                                                            <div className={cn('p-3', isDark ? 'bg-[#0B1220]' : 'bg-white')}>
+                                                                <p className={cn('text-xs font-semibold mb-1', isDark ? 'text-gray-400' : 'text-gray-600')}>Student's Answer</p>
+                                                                <p className={cn('text-sm leading-relaxed', isDark ? 'text-gray-300' : 'text-gray-800')}>{qa.answer}</p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className={cn('text-center py-6', isDark ? 'text-gray-400' : 'text-gray-500')}>
+                                                    <p className="text-sm">No questions and answers recorded yet.</p>
+                                                    <p className="text-xs mt-1">Q&A pairs will appear here once the interview is completed.</p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {fb.suggestions.length > 0 && (
+                                            <div
+                                                className={cn(
+                                                    'rounded-xl p-3 border',
+                                                    isDark ? 'bg-[#111827] border-white/10 text-gray-100' : 'bg-gray-50 border-gray-100 text-gray-800',
+                                                )}
+                                            >
+                                                <p className={cn('text-xs font-semibold mb-1', isDark ? 'text-gray-300' : 'text-gray-700')}>Suggested follow-ups</p>
+                                                <ul className="space-y-2">
+                                                    {fb.suggestions.map((s, idx) => (
+                                                        <li
+                                                            key={`${idx}-${s}`}
+                                                            className={cn(
+                                                                'text-sm leading-relaxed rounded-lg border p-2',
+                                                                isDark ? 'bg-[#0B1220] border-white/10 text-gray-100' : 'bg-white border-gray-100 text-gray-800',
+                                                            )}
+                                                        >
+                                                            {s}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         );
                     })()}
                 </DialogContent>
             </Dialog>
+
+            {/* Student List Dialog */}
+            <Dialog open={isStudentListOpen} onOpenChange={setIsStudentListOpen}>
+                <DialogContent
+                    className={cn(
+                        'max-w-2xl max-h-[90vh] overflow-y-auto',
+                        isDark
+                            ? 'bg-[#0F0F0F] text-gray-100 border border-white/10'
+                            : 'bg-white text-gray-900',
+                    )}
+                >
+                    <DialogHeader className="space-y-1">
+                        <DialogTitle className={cn('text-xl font-semibold', isDark ? 'text-white' : 'text-gray-900')}>
+                            Students List
+                        </DialogTitle>
+                        <DialogDescription className={cn('text-sm', isDark ? 'text-gray-400' : 'text-gray-600')}>
+                            {selectedInterview?.jobDescription || selectedInterview?.jobTitle || 'Interview'} - All students who took interviews with this Job Description
+                        </DialogDescription>
+                    </DialogHeader>
+                    
+                    <StudentListContent 
+                        interview={selectedInterview}
+                        userId={userId}
+                        isDark={isDark}
+                        onStudentClick={(student) => {
+                            setSelectedCandidate(student);
+                            setIsStudentListOpen(false);
+                            setIsFeedbackOpen(true);
+                        }}
+                    />
+                </DialogContent>
+            </Dialog>
+        </div>
+    );
+}
+
+// Student List Component
+function StudentListContent({ 
+    interview, 
+    userId, 
+    isDark, 
+    onStudentClick 
+}: { 
+    interview: InterviewData | null; 
+    userId: string | undefined;
+    isDark: boolean;
+    onStudentClick: (student: InterviewData) => void;
+}) {
+    const students = useQuery(
+        api.Interview.GetStudentsByInterview,
+        interview && userId ? {
+            interviewId: interview._id,
+            ownerId: userId as any
+        } : 'skip'
+    );
+
+
+    const formatRelativeTime = (timestamp?: number | null) => {
+        if (!timestamp) return 'Not started';
+        const diff = Date.now() - timestamp;
+        if (diff <= 0) return 'Just now';
+
+        const seconds = Math.floor(diff / 1000);
+        if (seconds < 60) return 'Just now';
+
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `${minutes} min${minutes === 1 ? '' : 's'} ago`;
+
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours} hr${hours === 1 ? '' : 's'} ago`;
+
+        const days = Math.floor(hours / 24);
+        if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+
+        const months = Math.floor(days / 30);
+        if (months < 12) return `${months} mo${months === 1 ? '' : 's'} ago`;
+
+        const years = Math.floor(months / 12);
+        return `${years} yr${years === 1 ? '' : 's'} ago`;
+    };
+
+    if (!interview || !userId) {
+        return (
+            <div className={cn('text-center py-8', isDark ? 'text-gray-400' : 'text-gray-500')}>
+                <p className="text-sm">No interview selected</p>
+            </div>
+        );
+    }
+
+    if (students === undefined) {
+        return (
+            <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, idx) => (
+                    <div key={idx} className={cn('rounded-lg border p-4', isDark ? 'border-white/10 bg-[#1A1A1A]' : 'border-gray-200 bg-gray-50')}>
+                        <Skeleton className="h-4 w-32 mb-2" />
+                        <Skeleton className="h-3 w-24" />
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    if (!Array.isArray(students) || students.length === 0) {
+        return (
+            <div className={cn('text-center py-8', isDark ? 'text-gray-400' : 'text-gray-500')}>
+                <p className="text-sm">No students have taken interviews with this Job Description yet.</p>
+                <p className="text-xs mt-1">Share the interview link to get started.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-3 mt-4">
+            <div className={cn('text-sm mb-2', isDark ? 'text-gray-300' : 'text-gray-700')}>
+                <span className="font-semibold">{students.length}</span> student{students.length !== 1 ? 's' : ''} found
+            </div>
+            {students.map((student) => (
+                <button
+                    key={String(student._id)}
+                    type="button"
+                    onClick={() => onStudentClick(student as InterviewData)}
+                    className={cn(
+                        'w-full text-left rounded-lg border p-4 transition hover:shadow-md',
+                        isDark
+                            ? 'border-white/10 bg-[#1A1A1A] hover:border-white/20 hover:bg-[#222222]'
+                            : 'border-gray-200 bg-gray-50 hover:border-[#1E90FF] hover:bg-blue-50/50',
+                    )}
+                >
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-2">
+                                <div
+                                    className={cn(
+                                        'size-2 rounded-full',
+                                        student.status === 'completed'
+                                            ? 'bg-emerald-500'
+                                            : student.status === 'in_progress'
+                                                ? 'bg-blue-500'
+                                                : 'bg-rose-500',
+                                    )}
+                                />
+                                <span className={cn('text-xs font-medium uppercase tracking-wide', isDark ? 'text-gray-400' : 'text-gray-500')}>
+                                    {student.status?.replace('_', ' ') || 'Unknown'}
+                                </span>
+                            </div>
+                            <p className={cn('text-sm font-semibold mb-1', isDark ? 'text-gray-100' : 'text-gray-900')}>
+                                {student.candidateName || 'Guest Student'}
+                            </p>
+                            <p className={cn('text-xs', isDark ? 'text-gray-400' : 'text-gray-500')}>
+                                {formatRelativeTime(student.completedAt ?? student.startedAt)}
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {student.qaPairs && Array.isArray(student.qaPairs) && student.qaPairs.length > 0 && (
+                                <span className={cn('text-xs px-2 py-1 rounded-full', isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-100 text-blue-600')}>
+                                    {student.qaPairs.length} Q&A
+                                </span>
+                            )}
+                            <ChevronRight className={cn('size-4', isDark ? 'text-gray-400' : 'text-gray-500')} />
+                        </div>
+                    </div>
+                </button>
+            ))}
         </div>
     );
 }

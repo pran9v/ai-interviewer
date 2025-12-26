@@ -14,6 +14,7 @@ interface InterviewResults {
     jobDescription: string | null;
     interviewQuestions: Array<{ question: string; answer: string }>;
     conversation: ConversationMessage[];
+    qaPairs?: Array<{question: string; answer: string; questionIndex: number; timestamp: number}>;
     feedback: FeedbackInfo;
     startedAt: number;
     completedAt: number;
@@ -255,19 +256,44 @@ function InterviewResults() {
                     </div>
                 </div>
 
-                {/* Questions Asked */}
+                {/* Questions & Answers */}
                 <div className="bg-white rounded-lg p-6 mt-8 shadow-sm">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-4">Questions Asked</h3>
-                    <div className="space-y-3">
-                        {interviewData.interviewQuestions.map((question, index) => (
-                            <div key={index} className="bg-gray-50 p-4 rounded-lg">
-                                <h4 className="font-medium text-gray-800 mb-2">
-                                    Question {index + 1}
-                                </h4>
-                                <p className="text-gray-700">{question.question}</p>
-                            </div>
-                        ))}
-                    </div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-4">Questions & Answers</h3>
+                    {interviewData.qaPairs && interviewData.qaPairs.length > 0 ? (
+                        <div className="space-y-4">
+                            {interviewData.qaPairs.map((qa, index) => (
+                                <div key={index} className="border border-gray-200 rounded-lg overflow-hidden">
+                                    <div className="bg-blue-50 p-4 border-b border-blue-100">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <h4 className="font-semibold text-blue-900">
+                                                Question {qa.questionIndex + 1}
+                                            </h4>
+                                            <span className="text-xs text-blue-600">
+                                                {new Date(qa.timestamp).toLocaleTimeString()}
+                                            </span>
+                                        </div>
+                                        <p className="text-gray-900">{qa.question}</p>
+                                    </div>
+                                    <div className="bg-gray-50 p-4">
+                                        <div className="text-xs font-semibold text-gray-600 mb-2">Student's Answer</div>
+                                        <p className="text-gray-800 leading-relaxed">{qa.answer}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            <p className="text-gray-500 text-sm mb-4">No Q&A pairs recorded. Showing template questions:</p>
+                            {interviewData.interviewQuestions.map((question, index) => (
+                                <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                                    <h4 className="font-medium text-gray-800 mb-2">
+                                        Question {index + 1}
+                                    </h4>
+                                    <p className="text-gray-700">{question.question}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
