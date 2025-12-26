@@ -1,12 +1,11 @@
 "use client"
 
 import { useClerk, useUser } from '@clerk/nextjs';
-import { useConvex, useQuery } from 'convex/react';
+import { useConvex } from 'convex/react';
 import {
     Bell,
     CalendarClock,
     CalendarDays,
-    ChevronRight,
     GraduationCap,
     LayoutDashboard,
     LogOut,
@@ -151,10 +150,6 @@ function Dashboard() {
     const isDark = themeChoice === 'dark';
     const [selectedCandidate, setSelectedCandidate] = useState<InterviewData | null>(null);
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
-    const [selectedInterview, setSelectedInterview] = useState<InterviewData | null>(null);
-    const [isStudentListOpen, setIsStudentListOpen] = useState(false);
-    const [studentList, setStudentList] = useState<InterviewData[]>([]);
-    const [loadingStudents, setLoadingStudents] = useState(false);
 
     const handleSignOut = useCallback(async () => {
         try {
@@ -234,15 +229,13 @@ function Dashboard() {
         });
     }, [interviewList]);
 
-    // Latest Candidates: Show only student interviews (with candidateName)
+    // Sort interviews to show most recent candidates first; include all for scrollable list
     const candidatePreviews = useMemo(() => {
-        return [...sortedInterviews].filter((c) => c.candidateName && c.candidateName.trim().length > 0);
+        return [...sortedInterviews].filter((c) => c.candidateName || c.jobTitle);
     }, [sortedInterviews]);
 
-    // Your Interview: Show only template interviews (without candidateName)
-    const highlightedInterviews = useMemo(() => {
-        return [...sortedInterviews].filter((c) => !c.candidateName || c.candidateName.trim().length === 0);
-    }, [sortedInterviews]);
+    // Use the same data for highlights
+    const highlightedInterviews = candidatePreviews;
 
     const activeInterviewCount = useMemo(
         () => interviewList.filter((item) => item.status === 'in_progress').length,
@@ -773,25 +766,20 @@ function Dashboard() {
                                                         <span className={cn('text-xs font-medium', isDark ? 'text-gray-500' : 'text-gray-400')}>
                                                             {formatRelativeTime(interview.completedAt ?? interview.startedAt)}
                                                         </span>
-                                                        <Button
-                                                            type="button"
-                                                            size="sm"
-                                                            variant="outline"
-                                                            onClick={(e) => {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                setSelectedInterview(interview);
-                                                                setIsStudentListOpen(true);
-                                                            }}
-                                                            className={cn(
-                                                                'h-8 rounded-full px-4 text-xs font-semibold',
-                                                                isDark
-                                                                    ? 'border-white/20 text-white hover:bg-white/10'
-                                                                    : 'border-[#1E90FF] text-[#1E90FF] hover:bg-[#E6F3FF]',
-                                                            )}
-                                                        >
-                                                            Open
-                                                        </Button>
+                                                        <Link href={`/interview/${interview._id}`}>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                className={cn(
+                                                                    'h-8 rounded-full px-4 text-xs font-semibold',
+                                                                    isDark
+                                                                        ? 'border-white/20 text-white hover:bg-white/10'
+                                                                        : 'border-[#1E90FF] text-[#1E90FF] hover:bg-[#E6F3FF]',
+                                                                )}
+                                                            >
+                                                                Open
+                                                            </Button>
+                                                        </Link>
                                                     </div>
                                                 </div>
                                             ))
@@ -941,169 +929,6 @@ function Dashboard() {
                     })()}
                 </DialogContent>
             </Dialog>
-
-            {/* Student List Dialog */}
-            <Dialog open={isStudentListOpen} onOpenChange={setIsStudentListOpen}>
-                <DialogContent
-                    className={cn(
-                        'max-w-2xl max-h-[90vh] overflow-y-auto',
-                        isDark
-                            ? 'bg-[#0F0F0F] text-gray-100 border border-white/10'
-                            : 'bg-white text-gray-900',
-                    )}
-                >
-                    <DialogHeader className="space-y-1">
-                        <DialogTitle className={cn('text-xl font-semibold', isDark ? 'text-white' : 'text-gray-900')}>
-                            Students List
-                        </DialogTitle>
-                        <DialogDescription className={cn('text-sm', isDark ? 'text-gray-400' : 'text-gray-600')}>
-                            {selectedInterview?.jobDescription || selectedInterview?.jobTitle || 'Interview'} - All students who took interviews with this Job Description
-                        </DialogDescription>
-                    </DialogHeader>
-                    
-                    <StudentListContent 
-                        interview={selectedInterview}
-                        userId={userId}
-                        isDark={isDark}
-                        onStudentClick={(student) => {
-                            setSelectedCandidate(student);
-                            setIsStudentListOpen(false);
-                            setIsFeedbackOpen(true);
-                        }}
-                    />
-                </DialogContent>
-            </Dialog>
-        </div>
-    );
-}
-
-// Student List Component
-function StudentListContent({ 
-    interview, 
-    userId, 
-    isDark, 
-    onStudentClick 
-}: { 
-    interview: InterviewData | null; 
-    userId: string | undefined;
-    isDark: boolean;
-    onStudentClick: (student: InterviewData) => void;
-}) {
-    const students = useQuery(
-        api.Interview.GetStudentsByInterview,
-        interview && userId ? {
-            interviewId: interview._id,
-            ownerId: userId as any
-        } : 'skip'
-    );
-
-
-    const formatRelativeTime = (timestamp?: number | null) => {
-        if (!timestamp) return 'Not started';
-        const diff = Date.now() - timestamp;
-        if (diff <= 0) return 'Just now';
-
-        const seconds = Math.floor(diff / 1000);
-        if (seconds < 60) return 'Just now';
-
-        const minutes = Math.floor(seconds / 60);
-        if (minutes < 60) return `${minutes} min${minutes === 1 ? '' : 's'} ago`;
-
-        const hours = Math.floor(minutes / 60);
-        if (hours < 24) return `${hours} hr${hours === 1 ? '' : 's'} ago`;
-
-        const days = Math.floor(hours / 24);
-        if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
-
-        const months = Math.floor(days / 30);
-        if (months < 12) return `${months} mo${months === 1 ? '' : 's'} ago`;
-
-        const years = Math.floor(months / 12);
-        return `${years} yr${years === 1 ? '' : 's'} ago`;
-    };
-
-    if (!interview || !userId) {
-        return (
-            <div className={cn('text-center py-8', isDark ? 'text-gray-400' : 'text-gray-500')}>
-                <p className="text-sm">No interview selected</p>
-            </div>
-        );
-    }
-
-    if (students === undefined) {
-        return (
-            <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, idx) => (
-                    <div key={idx} className={cn('rounded-lg border p-4', isDark ? 'border-white/10 bg-[#1A1A1A]' : 'border-gray-200 bg-gray-50')}>
-                        <Skeleton className="h-4 w-32 mb-2" />
-                        <Skeleton className="h-3 w-24" />
-                    </div>
-                ))}
-            </div>
-        );
-    }
-
-    if (!Array.isArray(students) || students.length === 0) {
-        return (
-            <div className={cn('text-center py-8', isDark ? 'text-gray-400' : 'text-gray-500')}>
-                <p className="text-sm">No students have taken interviews with this Job Description yet.</p>
-                <p className="text-xs mt-1">Share the interview link to get started.</p>
-            </div>
-        );
-    }
-
-    return (
-        <div className="space-y-3 mt-4">
-            <div className={cn('text-sm mb-2', isDark ? 'text-gray-300' : 'text-gray-700')}>
-                <span className="font-semibold">{students.length}</span> student{students.length !== 1 ? 's' : ''} found
-            </div>
-            {students.map((student) => (
-                <button
-                    key={String(student._id)}
-                    type="button"
-                    onClick={() => onStudentClick(student as InterviewData)}
-                    className={cn(
-                        'w-full text-left rounded-lg border p-4 transition hover:shadow-md',
-                        isDark
-                            ? 'border-white/10 bg-[#1A1A1A] hover:border-white/20 hover:bg-[#222222]'
-                            : 'border-gray-200 bg-gray-50 hover:border-[#1E90FF] hover:bg-blue-50/50',
-                    )}
-                >
-                    <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-2">
-                                <div
-                                    className={cn(
-                                        'size-2 rounded-full',
-                                        student.status === 'completed'
-                                            ? 'bg-emerald-500'
-                                            : student.status === 'in_progress'
-                                                ? 'bg-blue-500'
-                                                : 'bg-rose-500',
-                                    )}
-                                />
-                                <span className={cn('text-xs font-medium uppercase tracking-wide', isDark ? 'text-gray-400' : 'text-gray-500')}>
-                                    {student.status?.replace('_', ' ') || 'Unknown'}
-                                </span>
-                            </div>
-                            <p className={cn('text-sm font-semibold mb-1', isDark ? 'text-gray-100' : 'text-gray-900')}>
-                                {student.candidateName || 'Guest Student'}
-                            </p>
-                            <p className={cn('text-xs', isDark ? 'text-gray-400' : 'text-gray-500')}>
-                                {formatRelativeTime(student.completedAt ?? student.startedAt)}
-                            </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            {student.qaPairs && Array.isArray(student.qaPairs) && student.qaPairs.length > 0 && (
-                                <span className={cn('text-xs px-2 py-1 rounded-full', isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-100 text-blue-600')}>
-                                    {student.qaPairs.length} Q&A
-                                </span>
-                            )}
-                            <ChevronRight className={cn('size-4', isDark ? 'text-gray-400' : 'text-gray-500')} />
-                        </div>
-                    </div>
-                </button>
-            ))}
         </div>
     );
 }
