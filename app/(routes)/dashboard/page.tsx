@@ -421,8 +421,8 @@ function Dashboard() {
             <div className={containerClasses}>
                 <aside className={sidebarClasses} style={sidebarStyle}>
                     <div className={cn("flex items-center gap-3", isDark ? "text-white" : "text-[#1E90FF]")}>
-                        <Image src="/logo.svg" alt="Matryc" width={36} height={36} priority />
-                        <span className="text-xl font-semibold tracking-tight">Matryc</span>
+                        <Image src="/logo.png" alt="Prospective" width={200} height={100} priority />
+                        {/* <span className="text-xl font-semibold tracking-tight">Prospective</span> */}
                     </div>
 
                     <div className={profileCardClasses}>
@@ -495,7 +495,7 @@ function Dashboard() {
 
                     <div className="mt-auto flex flex-col gap-4">
                         <div className={sidebarNoteClasses}>
-                            Manage interviews and candidates seamlessly with Matryc.
+                            Manage interviews and candidates seamlessly with Prospective.
                         </div>
                         <Button
                             variant="ghost"
@@ -518,7 +518,7 @@ function Dashboard() {
                         <div className={mobileHeaderClasses}>
                             <div className="flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-3">
-                                    <Image src="/logo.svg" alt="Matryc" width={32} height={32} priority />
+                                    <Image src="/logo.png" alt="Prospective" width={32} height={32} priority />
                                     <div className="flex flex-col min-w-0">
                                         <span className={cn('text-xs truncate', isDark ? 'text-gray-400' : 'text-gray-500')}>Hello</span>
                                         <span className={cn('text-base font-semibold truncate', isDark ? 'text-white' : 'text-gray-900')}>
