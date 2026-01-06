@@ -13,7 +13,7 @@ const NAV_ITEMS = [
 function Header() {
   return (
     <header className="">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto pt-4 sm:pt-4 lg:pt-8 flex max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center gap-3">
           <Image
             src="/logo.png"

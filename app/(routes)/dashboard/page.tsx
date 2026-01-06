@@ -259,17 +259,6 @@ function Dashboard() {
         // Step 3: Group interviews by normalized jobDescription
         const groupedByJD = new Map<string, InterviewData[]>();
         
-        console.log('🔍 DEBUG: Starting grouping process');
-        console.log('📋 Template interviews found:', templateInterviews.length);
-        console.log('📋 Sample template data:', templateInterviews.slice(0, 5).map(i => ({
-            id: String(i._id),
-            jobTitle: i.jobTitle,
-            jobDescription: i.jobDescription,
-            jobDescriptionType: typeof i.jobDescription,
-            jobDescriptionValue: JSON.stringify(i.jobDescription),
-            candidateName: i.candidateName
-        })));
-        
         templateInterviews.forEach(interview => {
             const rawJD = interview.jobDescription;
             const normalizedJD = normalizeJobDescription(rawJD);
@@ -279,26 +268,11 @@ function Dashboard() {
                 ? normalizedJD 
                 : `no-jd-${String(interview._id)}`;
             
-            console.log('🔑 Processing interview:', {
-                id: String(interview._id),
-                rawJD: rawJD,
-                normalizedJD: normalizedJD,
-                groupKey: groupKey
-            });
-            
             if (!groupedByJD.has(groupKey)) {
                 groupedByJD.set(groupKey, []);
             }
             groupedByJD.get(groupKey)!.push(interview);
         });
-        
-        console.log('📊 Groups created:', Array.from(groupedByJD.entries()).map(([key, interviews]) => ({
-            groupKey: key,
-            count: interviews.length,
-            interviewIds: interviews.map(i => String(i._id)),
-            rawJDs: interviews.map(i => i.jobDescription),
-            normalizedJDs: interviews.map(i => normalizeJobDescription(i.jobDescription))
-        })));
         
         // Step 4: Create one representative interview per group
         const groupedResult: Array<InterviewData & { _groupCount?: number }> = [];
@@ -316,7 +290,6 @@ function Dashboard() {
                 const representative = sorted.find(i => i._id && i.jobDescription) || sorted[0];
                 
                 if (!representative || !representative._id) {
-                    console.warn('⚠️ Skipping group - no valid representative interview', normalizedJD);
                     return;
                 }
                 
@@ -325,21 +298,7 @@ function Dashboard() {
                     _groupCount: interviews.length, // Track how many interviews in this group
                     jobDescription: representative.jobDescription || null // Preserve original JD for query
                 });
-                
-                if (interviews.length > 1) {
-                    console.log(`✅ Grouped ${interviews.length} interviews with JD: "${normalizedJD}"`);
-                }
             }
-        });
-        
-        console.log('🎯 Final result:', {
-            totalCards: groupedResult.length,
-            groupsWithMultiple: groupedResult.filter(r => (r as any)._groupCount > 1).length,
-            allCards: groupedResult.map(r => ({
-                id: String(r._id),
-                jobDescription: r.jobDescription,
-                groupCount: (r as any)._groupCount
-            }))
         });
         
         // Step 5: Sort by most recent
@@ -911,8 +870,6 @@ function Dashboard() {
                                                                 if (interview && interview._id && interview.jobDescription) {
                                                                     setSelectedInterview(interview);
                                                                     setIsStudentListOpen(true);
-                                                                } else {
-                                                                    console.error('Invalid interview selected:', interview);
                                                                 }
                                                             }}
                                                             className={cn(
