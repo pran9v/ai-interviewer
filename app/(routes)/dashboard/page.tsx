@@ -221,6 +221,28 @@ function Dashboard() {
         fetchInterviews();
     }, [convex, userId, isUserLoaded]);
 
+    const handleInterviewCreated = useCallback(() => {
+        // Refresh the interview list when a new interview is created
+        if (userId) {
+            const refreshInterviews = async () => {
+                try {
+                    const result = await convex.query(api.Interview.GetInterviewList, {
+                        uid: userId as any, // TODO: narrow Convex type
+                    });
+
+                    if (Array.isArray(result)) {
+                        setInterviewList(result as InterviewData[]);
+                    } else {
+                        setInterviewList([]);
+                    }
+                } catch (error) {
+                    console.error('Error refreshing interview list:', error);
+                }
+            };
+            refreshInterviews();
+        }
+    }, [convex, userId]);
+
     const fullName = userDetail?.name ?? user?.fullName ?? 'Your profile';
     const greetingName = (userDetail?.name ?? user?.firstName ?? user?.fullName ?? 'there').split(' ')[0];
     const avatarUrl = userDetail?.imageUrl ?? user?.imageUrl ?? '';
@@ -234,9 +256,13 @@ function Dashboard() {
         });
     }, [interviewList]);
 
-    // Latest Candidates: Show only student interviews (with candidateName)
+    // Latest Candidates: Show only completed student interviews (with candidateName and not in progress)
     const candidatePreviews = useMemo(() => {
-        return [...sortedInterviews].filter((c) => c.candidateName && c.candidateName.trim().length > 0);
+        return [...sortedInterviews].filter((c) =>
+            c.candidateName &&
+            c.candidateName.trim().length > 0 &&
+            c.status !== 'in_progress'
+        );
     }, [sortedInterviews]);
 
     // Your Interview: Group template interviews by jobDescription
@@ -313,7 +339,12 @@ function Dashboard() {
         () => interviewList.filter((item) => item.status === 'in_progress').length,
         [interviewList],
     );
-    const candidateCount = interviewList.length;
+
+    // Count only actual candidates (interviews with candidateName)
+    const candidateCount = useMemo(
+        () => interviewList.filter((item) => item.candidateName && item.candidateName.trim().length > 0).length,
+        [interviewList],
+    );
 
     const normalizeFeedback = (
         fb: any,
@@ -346,7 +377,7 @@ function Dashboard() {
             : 'rounded-[30px] bg-white/90 backdrop-blur-xl border border-white/50',
     );
     const sidebarClasses = cn(
-        'hidden w-full max-w-[240px] shrink-0 flex-col gap-8 rounded-[26px] p-6 transition-colors duration-300 lg:flex',
+        'hidden w-full max-w-[240px] shrink-0 flex-col gap-8 rounded-[26px] p-6 transition-colors duration-300 lg:flex max-h-[calc(100vh-5.5rem)]',
         isDark
             ? 'bg-[#0F0F0F] text-gray-100 border border-white/10 shadow-none'
             : 'text-gray-900 shadow-xl ring-1 ring-white/30',
@@ -379,43 +410,44 @@ function Dashboard() {
         <div className={pageClasses}>
             <div className={containerClasses}>
                 <aside className={sidebarClasses} style={sidebarStyle}>
-                    <div className={cn("flex items-center gap-3", isDark ? "text-white" : "text-[#1E90FF]")}>
-                        <Image src="/logo.png" alt="Prospective" width={200} height={100} priority />
-                        {/* <span className="text-xl font-semibold tracking-tight">Prospective</span> */}
-                    </div>
+                    <div className="flex flex-col gap-8 flex-1 overflow-y-auto min-h-0">
+                        <div className={cn("flex items-center gap-3", isDark ? "text-white" : "text-[#1E90FF]")}>
+                            <Image src="/logo.png" alt="Prospective" width={200} height={100} priority />
+                            {/* <span className="text-xl font-semibold tracking-tight">Prospective</span> */}
+                        </div>
 
-                    <div className={profileCardClasses}>
-                        <div className="flex items-center gap-3">
-                            <div
-                                className={cn(
-                                    'size-12 overflow-hidden rounded-2xl text-base font-semibold transition-colors duration-300 border',
-                                    isDark
-                                        ? 'bg-white/10 text-white border-white/10'
-                                        : 'bg-white text-[#1E90FF] border-white/40 shadow-sm',
-                                )}
-                            >
-                                {avatarUrl ? (
-                                    <Image
-                                        src={avatarUrl}
-                                        alt={fullName}
-                                        width={48}
-                                        height={48}
-                                        className="size-full object-cover"
-                                        unoptimized
-                                    />
-                                ) : (
-                                    <div className="flex size-full items-center justify-center">{initials}</div>
-                                )}
-                            </div>
-                            <div className="flex flex-col min-w-0">
-                                <span className={cn('text-sm font-semibold truncate', isDark ? 'text-white' : 'text-gray-900')}>{fullName}</span>
-                                <span className={cn('text-xs truncate', isDark ? 'text-gray-400' : 'text-gray-500')}>Program Coordinator</span>
+                        <div className={profileCardClasses}>
+                            <div className="flex items-center gap-3">
+                                <div
+                                    className={cn(
+                                        'size-12 overflow-hidden rounded-2xl text-base font-semibold transition-colors duration-300 border',
+                                        isDark
+                                            ? 'bg-white/10 text-white border-white/10'
+                                            : 'bg-white text-[#1E90FF] border-white/40 shadow-sm',
+                                    )}
+                                >
+                                    {avatarUrl ? (
+                                        <Image
+                                            src={avatarUrl}
+                                            alt={fullName}
+                                            width={48}
+                                            height={48}
+                                            className="size-full object-cover"
+                                            unoptimized
+                                        />
+                                    ) : (
+                                        <div className="flex size-full items-center justify-center">{initials}</div>
+                                    )}
+                                </div>
+                                <div className="flex flex-col min-w-0">
+                                    <span className={cn('text-sm font-semibold truncate', isDark ? 'text-white' : 'text-gray-900')}>{fullName}</span>
+                                    <span className={cn('text-xs truncate', isDark ? 'text-gray-400' : 'text-gray-500')}>Program Coordinator</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <nav className="flex flex-col gap-2">
-                        {navItems.map((item) => {
+                        <nav className="flex flex-col gap-2">
+                            {navItems.map((item) => {
                             const Icon = item.icon;
                             const navClass = cn(
                                 'flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-colors duration-300',
@@ -450,9 +482,10 @@ function Dashboard() {
                                 </div>
                             );
                         })}
-                    </nav>
+                        </nav>
+                    </div>
 
-                    <div className="mt-auto flex flex-col gap-4">
+                    <div className="mt-auto flex flex-col gap-4 shrink-0">
                         <div className={sidebarNoteClasses}>
                             Manage interviews and candidates seamlessly with Prospective.
                         </div>
@@ -605,6 +638,7 @@ function Dashboard() {
                                                 <Plus className="size-4" />
                                             </Button>
                                         }
+                                        onInterviewCreated={handleInterviewCreated}
                                     />
                                 </div>
                             </div>
@@ -1046,7 +1080,7 @@ function Dashboard() {
                         <DialogTitle className={cn('text-xl font-semibold', isDark ? 'text-white' : 'text-gray-900')}>
                             Students List
                         </DialogTitle>
-                        <DialogDescription className={cn('text-sm', isDark ? 'text-gray-400' : 'text-gray-600')}>
+                        <DialogDescription className={cn('text-sm max-h-30 overflow-y-auto', isDark ? 'text-gray-400' : 'text-gray-600')}>
                             {selectedInterview?.jobDescription || selectedInterview?.jobTitle || 'Interview'} - All students who took interviews with this Job Description
                         </DialogDescription>
                     </DialogHeader>

@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useState } from 'react';
+import React, { useContext, useMemo, useRef, useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
@@ -43,6 +43,7 @@ type CreateInterviewDialogProps = {
     trigger?: React.ReactElement;
     triggerLabel?: string;
     triggerClassName?: string;
+    onInterviewCreated?: () => void;
 };
 
 const UNIVERSITY_PROGRAM_TYPES = ['Undergraduate', 'Graduate', 'Masters', 'Postgraduate Diploma', 'Doctorate'];
@@ -59,6 +60,7 @@ function CreateInterviewDialog({
     trigger,
     triggerLabel = '+ Create Interview',
     triggerClassName,
+    onInterviewCreated,
 }: CreateInterviewDialogProps) {
     const router = useRouter();
     const { user } = useUser();
@@ -82,6 +84,9 @@ function CreateInterviewDialog({
     const [videoRequired, setVideoRequired] = useState(true);
     const [shareDialogOpen, setShareDialogOpen] = useState(false);
     const [shareInfo, setShareInfo] = useState<{ id: string; title?: string } | null>(null);
+    const questionsScrollContainerRef = useRef<HTMLDivElement>(null);
+    const questionRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+    const [scrollToQuestionIndex, setScrollToQuestionIndex] = useState<number | null>(null);
 
     const currentProgressIndex = useMemo(() => {
         const active = step === 'loading' ? 'details' : step;
@@ -144,6 +149,31 @@ function CreateInterviewDialog({
             [field]: value,
         }));
     };
+
+    // Scroll to newly added question and focus textarea
+    useEffect(() => {
+        if (scrollToQuestionIndex !== null && questionRefs.current.has(scrollToQuestionIndex)) {
+            const questionElement = questionRefs.current.get(scrollToQuestionIndex);
+            if (questionElement && questionsScrollContainerRef.current) {
+                // Small delay to ensure DOM is fully updated
+                setTimeout(() => {
+                    questionElement.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'nearest',
+                        inline: 'nearest',
+                    });
+                    
+                    // Focus the textarea in the newly added question
+                    const textarea = questionElement.querySelector('textarea');
+                    if (textarea) {
+                        textarea.focus();
+                    }
+                    
+                    setScrollToQuestionIndex(null);
+                }, 100);
+            }
+        }
+    }, [scrollToQuestionIndex, questions.length]);
 
     const ensureUserRecord = async () => {
         let userId = userDetail?._id;
@@ -244,7 +274,14 @@ function CreateInterviewDialog({
     };
 
     const handleAddQuestion = () => {
-        setQuestions((prev) => [...prev, { question: '', answer: '' }]);
+        setQuestions((prev) => {
+            const newLength = prev.length + 1;
+            // Scroll to the newly added question after state update
+            setTimeout(() => {
+                setScrollToQuestionIndex(newLength - 1);
+            }, 0);
+            return [...prev, { question: '', answer: '' }];
+        });
     };
 
     const allQuestionsValid = questions.every((item) => item.question.trim().length > 0);
@@ -333,6 +370,9 @@ function CreateInterviewDialog({
             setShareInfo({ id: newId, title: displayTitle });
             setShareDialogOpen(true);
             handleOpenChange(false);
+
+            // Notify parent component to refresh data (no page reload needed)
+            onInterviewCreated?.();
         } catch (error) {
             console.error('Error saving interview:', error);
             toast.error('Failed to create interview. Please try again.');
@@ -521,7 +561,7 @@ function CreateInterviewDialog({
                                                     handleInputChange('description', event.target.value)
                                                 }
                                                 placeholder={placeholderDescription}
-                                                className="min-h-[140px] rounded-2xl bg-white/90 text-sm text-gray-900 shadow-sm focus-visible:ring-[#1E90FF] dark:bg-white/5 dark:text-gray-100 dark:shadow-none"
+                                                className="min-h-[140px] max-h-[300px] overflow-y-auto rounded-2xl bg-white/90 text-sm text-gray-900 shadow-sm focus-visible:ring-[#1E90FF] dark:bg-white/5 dark:text-gray-100 dark:shadow-none"
                                             />
                                             <p className="text-xs text-gray-400 dark:text-gray-500">
                                                 Don’t fret about formatting, we’ll take care of it.
@@ -560,10 +600,20 @@ function CreateInterviewDialog({
                                             </div>
                                         </div>
 
-                                        <div className="max-h-[320px] space-y-3 overflow-y-auto pr-1">
+                                        <div 
+                                            ref={questionsScrollContainerRef}
+                                            className="max-h-[320px] space-y-3 overflow-y-auto pr-1"
+                                        >
                                             {questions.map((item, index) => (
                                                 <div
                                                     key={`question-${index}`}
+                                                    ref={(el) => {
+                                                        if (el) {
+                                                            questionRefs.current.set(index, el);
+                                                        } else {
+                                                            questionRefs.current.delete(index);
+                                                        }
+                                                    }}
                                                     className={cn(
                                                         'flex items-start gap-3 rounded-3xl border border-gray-100 bg-white px-5 py-3.5 shadow-sm transition',
                                                         dragOverIndex === index

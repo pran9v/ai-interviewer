@@ -648,7 +648,7 @@ function StartInterview() {
                         key="interview"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="h-screen w-full flex items-center justify-center p-4 md:p-8 relative overflow-hidden"
+                        className="min-h-screen w-full flex items-center justify-center p-2 sm:p-4 md:p-8 relative overflow-hidden"
                     >
                         {/* Background Decoration */}
                         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-blue-50 to-indigo-50 -z-10" />
@@ -670,7 +670,7 @@ function StartInterview() {
                                         animate={{ x: 0 }}
                                         exit={{ x: '100%' }}
                                         transition={{ type: 'spring', damping: 20, stiffness: 220 }}
-                                        className="absolute top-0 right-0 h-full w-full md:w-96 bg-white shadow-2xl z-40 flex flex-col border-l border-gray-100"
+                                        className="absolute top-0 right-0 h-full w-full sm:w-[85vw] md:w-96 bg-white shadow-2xl z-40 flex flex-col border-l border-gray-100"
                                         onClick={(event) => event.stopPropagation()}
                                     >
                                         <div className="p-6 border-b border-gray-100 flex items-center justify-between">
@@ -729,30 +729,30 @@ function StartInterview() {
                             )}
                         </AnimatePresence>
 
-                        <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-6xl h-[85vh] overflow-hidden flex flex-col md:flex-row relative">
+                        <div className="bg-white rounded-2xl sm:rounded-[2rem] shadow-2xl w-full max-w-6xl h-[calc(100vh-2rem)] sm:h-[85vh] overflow-hidden flex flex-col md:flex-row relative">
                             
                             {/* Header */}
-                            <div className="absolute top-6 left-8 z-20 flex items-center gap-3">
-                                <div className="text-xl font-bold text-gray-900">
+                            <div className="absolute top-2 sm:top-4 md:top-6 left-2 sm:left-4 md:left-8 z-20 flex items-center gap-2 sm:gap-3 flex-wrap">
+                                <div className="text-base sm:text-lg md:text-xl font-bold text-gray-900">
                                     {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </div>
-                                <div className="h-4 w-px bg-gray-300" />
-                                <div className="text-blue-600 font-medium">{interviewData?.jobTitle || 'Interview'}</div>
+                                <div className="h-4 w-px bg-gray-300 hidden sm:block" />
+                                <div className="text-blue-600 font-medium text-xs sm:text-sm md:text-base truncate max-w-[120px] sm:max-w-none">{interviewData?.jobTitle || 'Interview'}</div>
                             </div>
 
-                            <div className="absolute top-6 right-8 z-30">
+                            <div className="absolute top-2 sm:top-4 md:top-6 right-2 sm:right-4 md:right-8 z-30">
                                 <Button 
                                     variant="secondary" 
                                     size="sm" 
-                                    className="rounded-full bg-blue-50 text-blue-600 border border-blue-100"
+                                    className="rounded-full bg-blue-50 text-blue-600 border border-blue-100 text-xs sm:text-sm h-8 sm:h-9 px-2 sm:px-3"
                                     onClick={() => setShowTranscript(true)}
                                 >
-                                    <Sparkles className="w-4 h-4 mr-1" /> Transcript
+                                    <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 mr-1" /> <span className="hidden sm:inline">Transcript</span>
                                 </Button>
                             </div>
 
                             {/* Q&A Panel - Left Side */}
-                            <div className="hidden md:flex absolute left-4 top-20 bottom-20 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-20 overflow-hidden flex-col">
+                            <div className="hidden md:flex absolute left-4 top-16 md:top-20 bottom-16 md:bottom-20 w-72 lg:w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-20 overflow-hidden flex-col">
                                 <div className="p-4 border-b border-gray-100 bg-blue-50">
                                     <h3 className="text-sm font-semibold text-gray-900">Questions & Answers</h3>
                                     <p className="text-xs text-gray-500 mt-1">{qaPairs.length} answered</p>
@@ -788,25 +788,25 @@ function StartInterview() {
                             </div>
                             
                             {/* Mobile Q&A Toggle Button */}
-                            <div className="md:hidden absolute top-20 left-4 z-20">
+                            <div className="md:hidden absolute top-12 sm:top-16 left-2 sm:left-4 z-20">
                                 <Button
                                     variant="secondary"
                                     size="sm"
-                                    className="rounded-full bg-white text-blue-600 border border-blue-100 shadow-sm"
+                                    className="rounded-full bg-white text-blue-600 border border-blue-100 shadow-sm text-xs h-7 sm:h-8 px-2 sm:px-3"
                                     onClick={() => setShowTranscript(!showTranscript)}
                                 >
-                                    <Sparkles className="w-4 h-4 mr-1" /> Q&A ({qaPairs.length})
+                                    <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 mr-1" /> Q&A ({qaPairs.length})
                                 </Button>
                             </div>
 
                             {/* AI Avatar Section */}
-                            <div className="flex-1 bg-blue-50/50 relative flex items-center justify-center p-8">
-                                <div className="relative w-48 h-48 md:w-64 md:h-64">
+                            <div className="flex-1 bg-blue-50/50 relative flex items-center justify-center p-4 sm:p-6 md:p-8 min-h-0">
+                                <div className="relative w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 lg:w-64 lg:h-64">
                                     {/* Simple Avatar Placeholder */}
                                     <div className="w-full h-full rounded-full bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center shadow-lg relative z-10">
                                          {/* Pulse effect handled by RealtimeVoice indirectly or we simulate */}
-                                         <div className="absolute inset-0 rounded-full border-4 border-white opacity-20 animate-ping" />
-                                         <span className="text-4xl text-white font-bold">AI</span>
+                                         <div className="absolute inset-0 rounded-full border-2 sm:border-4 border-white opacity-20 animate-ping" />
+                                         <span className="text-2xl sm:text-3xl md:text-4xl text-white font-bold">AI</span>
                 </div>
 
                                     {/* Render RealtimeVoice hidden but active */}
@@ -910,7 +910,7 @@ When finished, say: "Thank you for your time. This concludes our interview."
                             </div>
 
                             {/* User Video Section */}
-                            <div className="flex-1 bg-gray-100 relative overflow-hidden">
+                            <div className="flex-1 bg-gray-100 relative overflow-hidden min-h-[200px] sm:min-h-0">
                                 <video 
                                     ref={videoRef} 
                                     autoPlay 
@@ -920,46 +920,46 @@ When finished, say: "Thank you for your time. This concludes our interview."
                                 />
                                 {!isVideoOn && (
                                     <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
-                                        <div className="w-24 h-24 rounded-full bg-gray-600 flex items-center justify-center">
-                                            <span className="text-2xl text-white font-bold">{candidateName.charAt(0)}</span>
+                                        <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full bg-gray-600 flex items-center justify-center">
+                                            <span className="text-xl sm:text-2xl text-white font-bold">{candidateName.charAt(0)}</span>
                                         </div>
                                     </div>
                                 )}
-                                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 px-4 py-1 rounded-full backdrop-blur-md">
-                                    <span className="text-white text-sm font-medium">{candidateName} (You)</span>
+                                <div className="absolute bottom-2 sm:bottom-4 left-1/2 -translate-x-1/2 bg-black/50 px-2 sm:px-4 py-1 rounded-full backdrop-blur-md">
+                                    <span className="text-white text-xs sm:text-sm font-medium truncate max-w-[150px] sm:max-w-none">{candidateName} (You)</span>
                                     </div>
                                 </div>
 
                             {/* Controls Bar */}
-                            <div className="absolute bottom-8 left-0 w-full flex justify-center items-center gap-6 z-30 pointer-events-none">
-                                <div className="bg-white rounded-full shadow-xl p-2 flex items-center gap-4 pointer-events-auto border border-gray-100">
+                            <div className="absolute bottom-2 sm:bottom-4 md:bottom-8 left-0 w-full flex justify-center items-center gap-2 sm:gap-4 md:gap-6 z-30 pointer-events-none px-2 sm:px-4">
+                                <div className="bg-white rounded-full shadow-xl p-1.5 sm:p-2 flex items-center gap-2 sm:gap-3 md:gap-4 pointer-events-auto border border-gray-100">
                                     <Button 
                                         variant={isMicOn ? "ghost" : "destructive"} 
                                         size="icon" 
-                                        className={`rounded-full h-12 w-12 ${isMicOn ? 'hover:bg-gray-100' : ''}`}
+                                        className={`rounded-full h-9 w-9 sm:h-10 sm:w-10 md:h-12 md:w-12 ${isMicOn ? 'hover:bg-gray-100' : ''}`}
                                         onClick={toggleMic}
                                     >
-                                        {isMicOn ? <Mic className="w-5 h-5 text-gray-700" /> : <MicOff className="w-5 h-5 text-white" />}
+                                        {isMicOn ? <Mic className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" /> : <MicOff className="w-4 h-4 sm:w-5 sm:h-5 text-white" />}
                                     </Button>
                                     <Button 
                                         variant={isVideoOn ? "ghost" : "destructive"} 
                                         size="icon" 
-                                        className={`rounded-full h-12 w-12 ${isVideoOn ? 'hover:bg-gray-100' : ''}`}
+                                        className={`rounded-full h-9 w-9 sm:h-10 sm:w-10 md:h-12 md:w-12 ${isVideoOn ? 'hover:bg-gray-100' : ''}`}
                                         onClick={toggleVideo}
                                     >
-                                        {isVideoOn ? <Video className="w-5 h-5 text-gray-700" /> : <VideoOff className="w-5 h-5 text-white" />}
+                                        {isVideoOn ? <Video className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" /> : <VideoOff className="w-4 h-4 sm:w-5 sm:h-5 text-white" />}
                                     </Button>
                                 <Button 
-                                        className="rounded-full h-12 px-8 bg-red-500 hover:bg-red-600 text-white"
+                                        className="rounded-full h-9 sm:h-10 md:h-12 px-4 sm:px-6 md:px-8 bg-red-500 hover:bg-red-600 text-white text-xs sm:text-sm"
                                         onClick={handleEndInterview}
                                     >
-                                        <span className="mr-2 font-medium">End Call</span>
-                                        <LogOut className="w-4 h-4" />
+                                        <span className="mr-1 sm:mr-2 font-medium">End Call</span>
+                                        <LogOut className="w-3 h-3 sm:w-4 sm:h-4" />
                                 </Button>
                                 </div>
-                                <div className="absolute right-8 bg-white rounded-full shadow-sm px-3 py-1.5 flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                                    <span className="text-xs font-mono text-gray-600">{formatCallDuration(callSeconds)}</span>
+                                <div className="absolute right-2 sm:right-4 md:right-8 bg-white rounded-full shadow-sm px-2 sm:px-3 py-1 sm:py-1.5 flex items-center gap-1.5 sm:gap-2">
+                                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-red-500 animate-pulse" />
+                                    <span className="text-[10px] sm:text-xs font-mono text-gray-600">{formatCallDuration(callSeconds)}</span>
                                 </div>
                             </div>
 
