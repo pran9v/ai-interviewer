@@ -67,6 +67,35 @@ function OnboardingContent() {
   const [universityAbout, setUniversityAbout] = useState('')
   const [websiteValid, setWebsiteValid] = useState(false)
 
+  // Validate password format
+  const validatePassword = (pwd: string): { isValid: boolean; message: string } => {
+    if (!pwd || pwd.length < 8) {
+      return {
+        isValid: false,
+        message: 'Password must be at least 8 characters long'
+      }
+    }
+    if (!/[A-Z]/.test(pwd)) {
+      return {
+        isValid: false,
+        message: 'Password must contain at least one uppercase letter'
+      }
+    }
+    if (!/[a-z]/.test(pwd)) {
+      return {
+        isValid: false,
+        message: 'Password must contain at least one lowercase letter'
+      }
+    }
+    if (!/[0-9]/.test(pwd)) {
+      return {
+        isValid: false,
+        message: 'Password must contain at least one number'
+      }
+    }
+    return { isValid: true, message: '' }
+  }
+
   // Validate website URL
   const validateWebsite = (url: string) => {
     const urlPattern = /^[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(\.[a-zA-Z]{2,})?$/
@@ -98,7 +127,6 @@ function OnboardingContent() {
         router.push('/dashboard')
       }
     } catch (err: any) {
-      console.error('Sign in error:', err)
       toast.error(err.errors?.[0]?.message || 'Failed to sign in')
     } finally {
       setLoading(false)
@@ -117,6 +145,14 @@ function OnboardingContent() {
       toast.error('Please agree to the terms & privacy policy')
       return
     }
+    
+    // Validate password format before submitting
+    const passwordValidation = validatePassword(password)
+    if (!passwordValidation.isValid) {
+      toast.error(passwordValidation.message)
+      return
+    }
+    
     setLoading(true)
     try {
       await signUp?.create({ emailAddress: email, password })
@@ -124,8 +160,36 @@ function OnboardingContent() {
       setPendingVerification(true)
       toast.success('Verification code sent to your email!')
     } catch (err: any) {
-      console.error('Sign up error:', err)
-      toast.error(err.errors?.[0]?.message || 'Failed to create account')
+      // Parse Clerk error messages and show appropriate user-friendly messages
+      const errorMessage = err.errors?.[0]?.message || ''
+      let userFriendlyMessage = 'Failed to create account'
+      
+      // Check for specific error types
+      if (errorMessage.includes('password') || errorMessage.includes('Password')) {
+        // Check if it's a format issue or breach issue
+        if (errorMessage.toLowerCase().includes('breach') || errorMessage.toLowerCase().includes('data breach')) {
+          userFriendlyMessage = 'For your account security, please choose a different password.'
+        } else if (errorMessage.toLowerCase().includes('too short') || errorMessage.toLowerCase().includes('minimum')) {
+          userFriendlyMessage = 'Password must be at least 8 characters long'
+        } else if (errorMessage.toLowerCase().includes('uppercase')) {
+          userFriendlyMessage = 'Password must contain at least one uppercase letter'
+        } else if (errorMessage.toLowerCase().includes('lowercase')) {
+          userFriendlyMessage = 'Password must contain at least one lowercase letter'
+        } else if (errorMessage.toLowerCase().includes('number') || errorMessage.toLowerCase().includes('digit')) {
+          userFriendlyMessage = 'Password must contain at least one number'
+        } else if (errorMessage.toLowerCase().includes('special') || errorMessage.toLowerCase().includes('symbol')) {
+          userFriendlyMessage = 'Password must contain at least one special character'
+        } else {
+          // Generic password format error
+          userFriendlyMessage = 'Password does not meet requirements. Please ensure your password is at least 8 characters long and contains uppercase, lowercase, and numbers.'
+        }
+      } else if (errorMessage.includes('email')) {
+        userFriendlyMessage = errorMessage
+      } else {
+        userFriendlyMessage = errorMessage || 'Failed to create account'
+      }
+      
+      toast.error(userFriendlyMessage)
     } finally {
       setLoading(false)
     }
@@ -135,6 +199,13 @@ function OnboardingContent() {
   const handleVerifyEmail = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!signUpLoaded) return
+    
+    // Validate code format before submitting
+    if (!verificationCode || verificationCode.length !== 6) {
+      toast.error('Please enter a valid 6-digit verification code')
+      return
+    }
+    
     setLoading(true)
     try {
       const completeSignUp = await signUp?.attemptEmailAddressVerification({ code: verificationCode })
@@ -143,15 +214,37 @@ function OnboardingContent() {
         if (firstName || lastName) {
           try {
             await completeSignUp.update({ firstName: firstName || undefined, lastName: lastName || undefined })
-          } catch (updateErr) { console.error('Error updating name:', updateErr) }
+          } catch (updateErr) { }
         }
         setStep(2)
         setPendingVerification(false)
         toast.success('Email verified! Please select your role.')
       }
     } catch (err: any) {
-      console.error('Verification error:', err)
-      toast.error(err.errors?.[0]?.message || 'Invalid verification code')
+      // Parse Clerk error messages and show user-friendly messages
+      const errorMessage = err.errors?.[0]?.message || ''
+      const errorCode = err.errors?.[0]?.code || ''
+      const fullErrorText = `${errorMessage} ${errorCode}`.toLowerCase()
+      
+      let userFriendlyMessage = 'Invalid verification code'
+      
+      // Check for specific error types
+      if (fullErrorText.includes('expired') || fullErrorText.includes('expire')) {
+        userFriendlyMessage = 'This verification code has expired. Please request a new code.'
+      } else if (fullErrorText.includes('invalid') || fullErrorText.includes('incorrect') || fullErrorText.includes('wrong')) {
+        userFriendlyMessage = 'The verification code you entered is incorrect. Please check and try again.'
+      } else if (fullErrorText.includes('already used') || fullErrorText.includes('already verified')) {
+        userFriendlyMessage = 'This verification code has already been used. Please request a new code.'
+      } else if (fullErrorText.includes('too many') || fullErrorText.includes('attempts') || fullErrorText.includes('rate limit')) {
+        userFriendlyMessage = 'Too many verification attempts. Please wait a moment and request a new code.'
+      } else if (fullErrorText.includes('not found') || fullErrorText.includes('does not exist')) {
+        userFriendlyMessage = 'Verification code not found. Please request a new code.'
+      } else if (errorMessage) {
+        // Use the original message if it's already user-friendly
+        userFriendlyMessage = errorMessage
+      }
+      
+      toast.error(userFriendlyMessage)
     } finally {
       setLoading(false)
     }
@@ -197,7 +290,6 @@ function OnboardingContent() {
         throw new Error('User not authenticated')
       }
     } catch (err: any) {
-      console.error('Error saving profile:', err)
       toast.error('Failed to save profile information')
     } finally {
       setLoading(false)
@@ -239,7 +331,6 @@ function OnboardingContent() {
         })
       }
     } catch (err: any) {
-      console.error('Google sign in error:', err)
       toast.error('Failed to sign in with Google')
       setGoogleLoading(false)
     }
@@ -434,6 +525,9 @@ function OnboardingContent() {
                         <Lock className="w-4 h-4 text-gray-400" />
                       </div>
                     </div>
+                    <p className="text-xs text-gray-500 mt-1 px-1">
+                      Password must be at least 8 characters with uppercase, lowercase, and numbers
+                    </p>
 
                     <div className="flex items-center gap-2.5 pt-1">
                       <input

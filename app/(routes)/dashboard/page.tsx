@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/convex/_generated/api';
 import { UserDetailContext } from '@/context/UserDetailContext';
@@ -66,29 +66,29 @@ type StatCardProps = {
 const StatCard = ({ icon: Icon, accent, title, value, caption, dark = false }: StatCardProps) => (
     <div
         className={cn(
-            'relative overflow-hidden rounded-3xl p-6 transition hover:-translate-y-0.5',
+            'relative overflow-hidden rounded-2xl sm:rounded-3xl p-4 sm:p-5 md:p-6 transition hover:-translate-y-0.5',
             dark
                 ? 'border border-white/10 bg-[#0F0F0F] text-gray-100 hover:shadow-lg hover:shadow-black/30'
                 : 'border border-white/60 bg-white/90 text-gray-900 shadow-xl hover:shadow-2xl backdrop-blur-sm',
         )}
     >
-        <div className="flex items-start justify-between gap-6">
-            <div className="flex flex-col gap-4">
+        <div className="flex items-start justify-between gap-3 sm:gap-4 md:gap-6">
+            <div className="flex flex-col gap-2 sm:gap-3 md:gap-4">
                 <div
-                    className="inline-flex size-12 items-center justify-center rounded-2xl text-base"
+                    className="inline-flex size-10 sm:size-11 md:size-12 items-center justify-center rounded-xl sm:rounded-2xl text-base shrink-0"
                     style={{ backgroundColor: `${accent}1A`, color: accent }}
                 >
-                    <Icon className="size-5" />
+                    <Icon className="size-4 sm:size-5" />
                 </div>
-                <span className={cn('text-xs font-medium uppercase tracking-wide', dark ? 'text-gray-400' : 'text-gray-400')}>
+                <span className={cn('text-[10px] sm:text-xs font-medium uppercase tracking-wide', dark ? 'text-gray-400' : 'text-gray-400')}>
                     {title}
                 </span>
-                <span className={cn('text-3xl font-semibold', dark ? 'text-gray-100' : 'text-gray-900')}>{value}</span>
-                <span className={cn('text-xs', dark ? 'text-gray-400' : 'text-gray-500')}>{caption}</span>
+                <span className={cn('text-2xl sm:text-2xl md:text-3xl font-semibold', dark ? 'text-gray-100' : 'text-gray-900')}>{value}</span>
+                <span className={cn('text-[10px] sm:text-xs', dark ? 'text-gray-400' : 'text-gray-500')}>{caption}</span>
             </div>
         </div>
         <div
-            className="pointer-events-none absolute -right-10 -top-10 size-24 rounded-full opacity-10"
+            className="pointer-events-none absolute -right-8 sm:-right-10 -top-8 sm:-top-10 size-20 sm:size-24 rounded-full opacity-10"
             style={{ backgroundColor: accent }}
         />
     </div>
@@ -155,6 +155,7 @@ function Dashboard() {
     const [isStudentListOpen, setIsStudentListOpen] = useState(false);
     const [studentList, setStudentList] = useState<InterviewData[]>([]);
     const [loadingStudents, setLoadingStudents] = useState(false);
+    const [showNotifications, setShowNotifications] = useState(false);
 
     const handleSignOut = useCallback(async () => {
         try {
@@ -163,6 +164,27 @@ function Dashboard() {
             console.error('Failed to sign out', error);
         }
     }, [signOut]);
+
+    const handleNotificationClick = useCallback(() => {
+        setShowNotifications((prev) => !prev);
+    }, []);
+
+    // Close notifications when clicking outside
+    useEffect(() => {
+        if (!showNotifications) return;
+
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            if (!target.closest('[data-notification-dropdown]') && !target.closest('[data-notification-button]')) {
+                setShowNotifications(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showNotifications]);
 
     useEffect(() => {
         if (typeof document === 'undefined') return;
@@ -221,6 +243,28 @@ function Dashboard() {
         fetchInterviews();
     }, [convex, userId, isUserLoaded]);
 
+    const handleInterviewCreated = useCallback(() => {
+        // Refresh the interview list when a new interview is created
+        if (userId) {
+            const refreshInterviews = async () => {
+                try {
+                    const result = await convex.query(api.Interview.GetInterviewList, {
+                        uid: userId as any, // TODO: narrow Convex type
+                    });
+
+                    if (Array.isArray(result)) {
+                        setInterviewList(result as InterviewData[]);
+                    } else {
+                        setInterviewList([]);
+                    }
+                } catch (error) {
+                    console.error('Error refreshing interview list:', error);
+                }
+            };
+            refreshInterviews();
+        }
+    }, [convex, userId]);
+
     const fullName = userDetail?.name ?? user?.fullName ?? 'Your profile';
     const greetingName = (userDetail?.name ?? user?.firstName ?? user?.fullName ?? 'there').split(' ')[0];
     const avatarUrl = userDetail?.imageUrl ?? user?.imageUrl ?? '';
@@ -234,9 +278,13 @@ function Dashboard() {
         });
     }, [interviewList]);
 
-    // Latest Candidates: Show only student interviews (with candidateName)
+    // Latest Candidates: Show only completed student interviews (with candidateName and not in progress)
     const candidatePreviews = useMemo(() => {
-        return [...sortedInterviews].filter((c) => c.candidateName && c.candidateName.trim().length > 0);
+        return [...sortedInterviews].filter((c) =>
+            c.candidateName &&
+            c.candidateName.trim().length > 0 &&
+            c.status !== 'in_progress'
+        );
     }, [sortedInterviews]);
 
     // Your Interview: Group template interviews by jobDescription
@@ -259,17 +307,6 @@ function Dashboard() {
         // Step 3: Group interviews by normalized jobDescription
         const groupedByJD = new Map<string, InterviewData[]>();
         
-        console.log('🔍 DEBUG: Starting grouping process');
-        console.log('📋 Template interviews found:', templateInterviews.length);
-        console.log('📋 Sample template data:', templateInterviews.slice(0, 5).map(i => ({
-            id: String(i._id),
-            jobTitle: i.jobTitle,
-            jobDescription: i.jobDescription,
-            jobDescriptionType: typeof i.jobDescription,
-            jobDescriptionValue: JSON.stringify(i.jobDescription),
-            candidateName: i.candidateName
-        })));
-        
         templateInterviews.forEach(interview => {
             const rawJD = interview.jobDescription;
             const normalizedJD = normalizeJobDescription(rawJD);
@@ -279,26 +316,11 @@ function Dashboard() {
                 ? normalizedJD 
                 : `no-jd-${String(interview._id)}`;
             
-            console.log('🔑 Processing interview:', {
-                id: String(interview._id),
-                rawJD: rawJD,
-                normalizedJD: normalizedJD,
-                groupKey: groupKey
-            });
-            
             if (!groupedByJD.has(groupKey)) {
                 groupedByJD.set(groupKey, []);
             }
             groupedByJD.get(groupKey)!.push(interview);
         });
-        
-        console.log('📊 Groups created:', Array.from(groupedByJD.entries()).map(([key, interviews]) => ({
-            groupKey: key,
-            count: interviews.length,
-            interviewIds: interviews.map(i => String(i._id)),
-            rawJDs: interviews.map(i => i.jobDescription),
-            normalizedJDs: interviews.map(i => normalizeJobDescription(i.jobDescription))
-        })));
         
         // Step 4: Create one representative interview per group
         const groupedResult: Array<InterviewData & { _groupCount?: number }> = [];
@@ -316,7 +338,6 @@ function Dashboard() {
                 const representative = sorted.find(i => i._id && i.jobDescription) || sorted[0];
                 
                 if (!representative || !representative._id) {
-                    console.warn('⚠️ Skipping group - no valid representative interview', normalizedJD);
                     return;
                 }
                 
@@ -325,21 +346,7 @@ function Dashboard() {
                     _groupCount: interviews.length, // Track how many interviews in this group
                     jobDescription: representative.jobDescription || null // Preserve original JD for query
                 });
-                
-                if (interviews.length > 1) {
-                    console.log(`✅ Grouped ${interviews.length} interviews with JD: "${normalizedJD}"`);
-                }
             }
-        });
-        
-        console.log('🎯 Final result:', {
-            totalCards: groupedResult.length,
-            groupsWithMultiple: groupedResult.filter(r => (r as any)._groupCount > 1).length,
-            allCards: groupedResult.map(r => ({
-                id: String(r._id),
-                jobDescription: r.jobDescription,
-                groupCount: (r as any)._groupCount
-            }))
         });
         
         // Step 5: Sort by most recent
@@ -354,7 +361,12 @@ function Dashboard() {
         () => interviewList.filter((item) => item.status === 'in_progress').length,
         [interviewList],
     );
-    const candidateCount = interviewList.length;
+
+    // Count only actual candidates (interviews with candidateName)
+    const candidateCount = useMemo(
+        () => interviewList.filter((item) => item.candidateName && item.candidateName.trim().length > 0).length,
+        [interviewList],
+    );
 
     const normalizeFeedback = (
         fb: any,
@@ -377,17 +389,17 @@ function Dashboard() {
     };
 
     const pageClasses = cn(
-        'min-h-screen pb-12 pt-10 transition-colors duration-300 font-sans',
+        'min-h-screen pb-6 sm:pb-8 md:pb-12 pt-4 sm:pt-6 md:pt-10 transition-colors duration-300 font-sans',
         isDark ? 'bg-black text-white' : 'bg-white text-gray-900',
     );
     const containerClasses = cn(
-        'mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 md:px-8 lg:flex-row lg:px-12',
+        'mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-6 md:gap-8 px-2 sm:px-4 md:px-8 lg:flex-row lg:px-12',
         isDark
             ? ''
-            : 'rounded-[30px] bg-white/90 backdrop-blur-xl border border-white/50',
+            : 'rounded-2xl sm:rounded-[30px] bg-white/90 backdrop-blur-xl border border-white/50',
     );
     const sidebarClasses = cn(
-        'hidden w-full max-w-[240px] shrink-0 flex-col gap-8 rounded-[26px] p-6 transition-colors duration-300 lg:flex',
+        'hidden w-full max-w-[240px] shrink-0 flex-col gap-8 rounded-[26px] p-6 transition-colors duration-300 lg:flex max-h-[calc(100vh-5.5rem)]',
         isDark
             ? 'bg-[#0F0F0F] text-gray-100 border border-white/10 shadow-none'
             : 'text-gray-900 shadow-xl ring-1 ring-white/30',
@@ -406,7 +418,7 @@ function Dashboard() {
             : 'bg-white text-gray-600 border border-[#D4E9FF] shadow-[0_10px_28px_rgba(30,144,255,0.1)]',
     );
     const mobileHeaderClasses = cn(
-        'rounded-3xl p-5 shadow-sm transition-colors duration-300 lg:hidden',
+        'rounded-2xl sm:rounded-3xl p-3 sm:p-4 md:p-5 shadow-sm transition-colors duration-300 lg:hidden',
         isDark ? 'bg-[#0F0F0F] border border-white/10 shadow-none' : 'bg-white/90 shadow-lg',
     );
     const heroStyle = !isDark
@@ -420,8 +432,16 @@ function Dashboard() {
         <div className={pageClasses}>
             <div className={containerClasses}>
                 <aside className={sidebarClasses} style={sidebarStyle}>
+                    <div className="flex flex-col gap-8 flex-1 overflow-y-auto min-h-0">
                     <div className={cn("flex items-center gap-3", isDark ? "text-white" : "text-[#1E90FF]")}>
-                        <Image src="/logo.png" alt="Prospective" width={200} height={100} priority />
+                        <Image 
+                            src="/logo.png" 
+                            alt="Prospective" 
+                            width={200} 
+                            height={100} 
+                            className="w-full max-w-[180px] sm:max-w-[200px] h-auto object-contain" 
+                            priority 
+                        />
                         {/* <span className="text-xl font-semibold tracking-tight">Prospective</span> */}
                     </div>
 
@@ -492,8 +512,9 @@ function Dashboard() {
                             );
                         })}
                     </nav>
+                    </div>
 
-                    <div className="mt-auto flex flex-col gap-4">
+                    <div className="mt-auto flex flex-col gap-4 shrink-0">
                         <div className={sidebarNoteClasses}>
                             Manage interviews and candidates seamlessly with Prospective.
                         </div>
@@ -516,47 +537,56 @@ function Dashboard() {
                 <main className="flex-1">
                     <div className="flex flex-col gap-6">
                         <div className={mobileHeaderClasses}>
-                            <div className="flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-3">
-                                    <Image src="/logo.png" alt="Prospective" width={32} height={32} priority />
-                                    <div className="flex flex-col min-w-0">
-                                        <span className={cn('text-xs truncate', isDark ? 'text-gray-400' : 'text-gray-500')}>Hello</span>
-                                        <span className={cn('text-base font-semibold truncate', isDark ? 'text-white' : 'text-gray-900')}>
+                            <div className="flex items-center justify-between gap-2 sm:gap-3 flex-wrap">
+                                <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                                    <Image 
+                                        src="/logo.png" 
+                                        alt="Prospective" 
+                                        width={120} 
+                                        height={60} 
+                                        className="w-24 sm:w-28 md:w-32 h-auto shrink-0 object-contain" 
+                                        priority 
+                                    />
+                                    <div className="flex flex-col min-w-0 flex-1">
+                                        <span className={cn('text-[10px] sm:text-xs truncate', isDark ? 'text-gray-400' : 'text-gray-500')}>Hello</span>
+                                        <span className={cn('text-sm sm:text-base font-semibold truncate', isDark ? 'text-white' : 'text-gray-900')}>
                                             {fullName}
                                         </span>
                                     </div>
                                 </div>
+                                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                                 <Button
                                     variant="ghost"
                                     className={cn(
-                                        'rounded-full px-4 py-2 text-xs font-semibold transition-colors duration-300',
+                                            'rounded-full px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold transition-colors duration-300',
                                         isDark ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-white text-[#1E90FF] shadow-md hover:bg-[#E6F3FF]',
                                     )}
                                 >
-                                    <LayoutDashboard className="mr-2 size-4" />
-                                    Dashboard
+                                        <LayoutDashboard className="mr-1 sm:mr-2 size-3 sm:size-4" />
+                                        <span className="hidden xs:inline">Dashboard</span>
                                 </Button>
                                 <Button
                                     variant="ghost"
                                     className={cn(
-                                        'rounded-full px-3 py-2 text-xs font-semibold transition-colors duration-300 lg:hidden',
+                                            'rounded-full px-2 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold transition-colors duration-300 lg:hidden',
                                         isDark ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-white text-red-500 shadow-md hover:bg-red-50',
                                     )}
                                     onClick={handleSignOut}
                                 >
-                                    <LogOut className="mr-1.5 size-4" />
-                                    Log out
+                                        <LogOut className="mr-1 sm:mr-1.5 size-3 sm:size-4" />
+                                        <span className="hidden xs:inline">Log out</span>
                                 </Button>
+                                </div>
                             </div>
                             {navItems.length > 1 && (
-                                <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+                                <div className="mt-3 sm:mt-4 flex gap-1.5 sm:gap-2 overflow-x-auto pb-1 -mx-3 sm:-mx-4 md:-mx-5 px-3 sm:px-4 md:px-5">
                                     {navItems.map((item) => {
                                         const Icon = item.icon;
                                         return (
                                             <div
                                                 key={`${item.label}-mobile`}
                                                 className={cn(
-                                                    'flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-colors duration-300',
+                                                    'flex items-center gap-1.5 sm:gap-2 rounded-full px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-medium transition-colors duration-300 shrink-0',
                                                     item.active
                                                         ? isDark
                                                             ? 'bg-white/10 text-white'
@@ -566,7 +596,7 @@ function Dashboard() {
                                                             : 'bg-white/70 text-[#1E90FF]',
                                                 )}
                                             >
-                                                <Icon className="size-4" />
+                                                <Icon className="size-3 sm:size-4" />
                                                 <span>{item.label}</span>
                                             </div>
                                         );
@@ -575,14 +605,14 @@ function Dashboard() {
                             )}
                         </div>
 
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-center lg:justify-between">
                             <div className="relative w-full lg:max-w-sm">
-                                <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
+                                <Search className="pointer-events-none absolute left-3 sm:left-4 top-1/2 size-3 sm:size-4 -translate-y-1/2 text-gray-400" />
                                 <Input
                                     type="search"
                                     placeholder="Search interviews or candidates"
                                     className={cn(
-                                        'h-12 rounded-full border-0 pl-11 pr-4 text-sm shadow-sm ring-1 ring-transparent transition-colors duration-300 focus:border-transparent focus-visible:ring-2 focus-visible:ring-[#1E90FF]/40',
+                                        'h-10 sm:h-11 md:h-12 rounded-full border-0 pl-9 sm:pl-10 md:pl-11 pr-3 sm:pr-4 text-xs sm:text-sm shadow-sm ring-1 ring-transparent transition-colors duration-300 focus:border-transparent focus-visible:ring-2 focus-visible:ring-[#1E90FF]/40',
                                         isDark
                                             ? 'bg-white/10 text-gray-200 placeholder:text-gray-500'
                                             : 'bg-white text-gray-600',
@@ -590,11 +620,11 @@ function Dashboard() {
                                 />
                             </div>
 
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end sm:gap-4">
-                                <div className="flex w-full items-center gap-3 overflow-x-auto pb-1 sm:w-auto sm:justify-end sm:overflow-visible">
+                            <div className="flex flex-col gap-2 sm:gap-3 lg:flex-row lg:items-center lg:justify-end lg:gap-4">
+                                <div className="flex w-full items-center gap-2 sm:gap-3 overflow-x-auto pb-1 lg:w-auto lg:justify-end lg:overflow-visible">
                                     <div
                                         className={cn(
-                                            'flex shrink-0 items-center gap-2 rounded-full p-1 shadow-sm transition-colors duration-300',
+                                            'flex shrink-0 items-center gap-1 sm:gap-2 rounded-full p-0.5 sm:p-1 shadow-sm transition-colors duration-300',
                                             isDark ? 'border border-white/10 bg-white/10 shadow-none' : 'bg-white/85 border border-white/60 shadow-lg',
                                         )}
                                     >
@@ -602,60 +632,123 @@ function Dashboard() {
                                             type="button"
                                             onClick={() => setThemeChoice('light')}
                                             className={cn(
-                                                'flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold transition',
+                                                'flex items-center gap-1 sm:gap-2 rounded-full px-2 sm:px-3 py-1 text-[10px] sm:text-xs font-semibold transition',
                                                 !isDark
                                                     ? 'bg-[#1E90FF] text-white shadow'
                                                     : 'text-gray-400 hover:bg-white/10',
                                             )}
                                         >
-                                            <Sun className="size-4" />
-                                            <span className="hidden md:inline">Light</span>
+                                            <Sun className="size-3 sm:size-4" />
+                                            <span className="hidden sm:inline md:hidden lg:inline">Light</span>
                                         </button>
                                         <button
                                             type="button"
                                             onClick={() => setThemeChoice('dark')}
                                             className={cn(
-                                                'flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold transition',
+                                                'flex items-center gap-1 sm:gap-2 rounded-full px-2 sm:px-3 py-1 text-[10px] sm:text-xs font-semibold transition',
                                                 isDark
                                                     ? 'bg-[#1E90FF] text-white shadow'
                                                     : 'text-[#1E90FF] hover:bg-[#E6F3FF]',
                                             )}
                                         >
-                                            <Moon className="size-4" />
-                                            <span className="hidden md:inline">Dark</span>
+                                            <Moon className="size-3 sm:size-4" />
+                                            <span className="hidden sm:inline md:hidden lg:inline">Dark</span>
                                         </button>
                                     </div>
 
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className={cn(
-                                            'size-11 shrink-0 rounded-full border text-gray-500 shadow-sm transition-colors duration-300',
-                                            isDark
-                                                ? 'border-white/10 bg-white/10 text-gray-300 hover:bg-white/20'
-                                                : 'border-transparent bg-white hover:border-[#BEE3FF] hover:text-[#1E90FF]',
+                                    <div className="relative" data-notification-dropdown>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleNotificationClick();
+                                            }}
+                                            aria-label="Notifications"
+                                            data-notification-button
+                                            className={cn(
+                                                'size-9 sm:size-10 md:size-11 shrink-0 rounded-full border text-gray-500 shadow-sm transition-colors duration-300 cursor-pointer relative z-50',
+                                                isDark
+                                                    ? 'border-white/10 bg-white/10 text-gray-300 hover:bg-white/20 hover:text-white'
+                                                    : 'border-transparent bg-white hover:border-[#BEE3FF] hover:text-[#1E90FF]',
+                                                showNotifications && (isDark ? 'bg-white/20 text-white' : 'bg-[#E6F3FF] text-[#1E90FF]'),
+                                            )}
+                                        >
+                                            <Bell className="size-4 sm:size-5" />
+                                        </Button>
+
+                                        {/* Notification Dropdown */}
+                                        {showNotifications && (
+                                            <>
+                                                {/* Backdrop for mobile */}
+                                                <div
+                                                    className="fixed inset-0 bg-black/20 sm:hidden"
+                                                    onClick={() => setShowNotifications(false)}
+                                                    style={{ WebkitTapHighlightColor: 'transparent', zIndex: 99998 }}
+                                                />
+                                                {/* Mobile: Use fixed positioning to escape overflow | Desktop: absolute positioning relative to button */}
+                                                <div 
+                                                    className="fixed left-2 right-2 top-12 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80 md:w-96 rounded-2xl shadow-2xl border transition-all duration-200 ease-out max-h-[calc(100vh-3.5rem)] sm:max-h-none overflow-hidden"
+                                                    style={{ zIndex: 99999, pointerEvents: 'auto' }}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    <div
+                                                        className={cn(
+                                                            'rounded-2xl overflow-hidden w-full',
+                                                            isDark
+                                                                ? 'bg-[#0F0F0F] border-white/10'
+                                                                : 'bg-white border-gray-200',
+                                                        )}
+                                                    >
+                                                        <div className={cn('p-4 border-b', isDark ? 'border-white/10' : 'border-gray-100')}>
+                                                            <div className="flex items-center justify-between">
+                                                                <h3 className={cn('text-base font-semibold', isDark ? 'text-white' : 'text-gray-900')}>
+                                                                    Notifications
+                                                                </h3>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    type="button"
+                                                                    onClick={() => setShowNotifications(false)}
+                                                                    className="h-6 w-6 rounded-full"
+                                                                    aria-label="Close notifications"
+                                                                >
+                                                                    <span className="text-lg leading-none">&times;</span>
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                        <div className="max-h-[60vh] sm:max-h-[400px] overflow-y-auto">
+                                                            <div className={cn('p-8 text-center', isDark ? 'text-gray-400' : 'text-gray-500')}>
+                                                                <Bell className={cn('mx-auto mb-3 size-8', isDark ? 'text-gray-600' : 'text-gray-300')} />
+                                                                <p className="text-sm font-medium mb-1">No notifications</p>
+                                                                <p className="text-xs">You're all caught up!</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </>
                                         )}
-                                    >
-                                        <Bell className="size-5" />
-                                    </Button>
+                                    </div>
 
                                     <CreateInterviewDialog
                                         trigger={
-                                            <Button className="flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-[#1E90FF] px-5 text-sm font-semibold text-white shadow-md hover:bg-[#1176D6] sm:flex-none">
+                                            <Button className="flex h-9 sm:h-10 md:h-11 flex-1 items-center justify-center gap-1.5 sm:gap-2 rounded-full bg-[#1E90FF] px-3 sm:px-4 md:px-5 text-xs sm:text-sm font-semibold text-white shadow-md hover:bg-[#1176D6] sm:flex-none shrink-0">
                                                 <span className="whitespace-nowrap">New Interview</span>
-                                                <Plus className="size-4" />
+                                                <Plus className="size-3 sm:size-4" />
                                             </Button>
                                         }
+                                        onInterviewCreated={handleInterviewCreated}
                                     />
                                 </div>
                             </div>
                         </div>
 
-                        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+                        <div className="grid gap-4 sm:gap-5 md:gap-6 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_320px]">
                             <div className="flex flex-col gap-6">
                                 <section
                                     className={cn(
-                                        'relative overflow-hidden rounded-3xl p-6 sm:p-8 transition-colors duration-300',
+                                        'relative overflow-hidden rounded-2xl sm:rounded-3xl p-4 sm:p-5 md:p-6 lg:p-8 transition-colors duration-300',
                                         isDark
                                             ? 'bg-linear-to-r from-[#111111] to-black border border-white/10 shadow-none'
                                             : 'border border-white/50 shadow-xl',
@@ -664,30 +757,30 @@ function Dashboard() {
                                 >
                                     {!isDark && (
                                         <>
-                                            <div className="pointer-events-none absolute -right-12 -top-16 h-44 w-44 rounded-full bg-[#85C8FF]/40 blur-3xl" />
-                                            <div className="pointer-events-none absolute -bottom-16 -left-12 h-48 w-48 rounded-full bg-[#1E90FF]/20 blur-3xl" />
+                                            <div className="pointer-events-none absolute -right-8 sm:-right-12 -top-12 sm:-top-16 h-32 w-32 sm:h-40 sm:w-40 md:h-44 md:w-44 rounded-full bg-[#85C8FF]/40 blur-3xl" />
+                                            <div className="pointer-events-none absolute -bottom-12 sm:-bottom-16 -left-8 sm:-left-12 h-36 w-36 sm:h-44 sm:w-44 md:h-48 md:w-48 rounded-full bg-[#1E90FF]/20 blur-3xl" />
                                         </>
                                     )}
                                     <div className="relative z-10">
-                                        <p className={cn('text-sm', isDark ? 'text-gray-300' : 'text-gray-600')}>
+                                        <p className={cn('text-xs sm:text-sm', isDark ? 'text-gray-300' : 'text-gray-600')}>
                                             Hello 👋, {greetingName}
                                         </p>
                                         <h1
                                             className={cn(
-                                                'mt-2 text-3xl font-semibold',
+                                                'mt-1.5 sm:mt-2 text-xl sm:text-2xl md:text-3xl font-semibold leading-tight',
                                                 isDark ? 'text-white' : 'text-gray-900',
                                             )}
                                         >
                                             Let's make your interviews stand out
                                         </h1>
-                                        <p className={cn('mt-4 max-w-xl text-sm', isDark ? 'text-gray-400' : 'text-gray-600')}>
+                                        <p className={cn('mt-3 sm:mt-4 max-w-xl text-xs sm:text-sm', isDark ? 'text-gray-400' : 'text-gray-600')}>
                                             Track candidate progress, manage interview schedules, and review performance insights — all
                                             in one beautiful workspace.
                                         </p>
                                     </div>
                                 </section>
 
-                                <section className="grid gap-4 sm:grid-cols-2">
+                                <section className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
                                     <StatCard
                                         icon={CalendarClock}
                                         accent={PRIMARY_COLOR}
@@ -708,20 +801,20 @@ function Dashboard() {
 
                                 <section
                                     className={cn(
-                                        'rounded-3xl p-6 transition-colors duration-300',
+                                        'rounded-2xl sm:rounded-3xl p-4 sm:p-5 md:p-6 transition-colors duration-300',
                                         isDark
                                             ? 'bg-[#0F0F0F] border border-white/10 shadow-none'
                                             : 'bg-white/90 border border-white/60 shadow-xl backdrop-blur-sm',
                                     )}
                                 >
-                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <h3 className={cn('text-lg font-semibold', isDark ? 'text-white' : 'text-gray-900')}>
+                                    <div className="flex flex-col gap-2 sm:gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <h3 className={cn('text-base sm:text-lg font-semibold', isDark ? 'text-white' : 'text-gray-900')}>
                                             Latest Candidates
                                         </h3>
                                         <div className="h-0 w-0" aria-hidden />
                                     </div>
 
-                                    <div className="mt-6 min-h-[320px] max-h-[320px] space-y-4 overflow-y-auto pr-1 snap-y snap-mandatory">
+                                    <div className="mt-4 sm:mt-6 min-h-[240px] sm:min-h-[280px] md:min-h-[320px] max-h-[320px] space-y-3 sm:space-y-4 overflow-y-auto pr-1 snap-y snap-mandatory">
                                         {loading
                                             ? Array.from({ length: 4 }).map((_, index) => (
                                                 <div
@@ -745,7 +838,7 @@ function Dashboard() {
                                                     <div
                                                         key={String(candidate._id)}
                                                         className={cn(
-                                                            'flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-4 transition hover:shadow-sm snap-start',
+                                                            'flex flex-wrap items-center justify-between gap-3 sm:gap-4 rounded-xl sm:rounded-2xl border p-3 sm:p-4 transition hover:shadow-sm snap-start',
                                                             isDark
                                                                 ? 'border-white/10 bg-[#1A1A1A] hover:shadow-black/20'
                                                                 : 'border-[#D7E7FF] bg-[#F3F8FF]',
@@ -759,10 +852,10 @@ function Dashboard() {
                                                             }}
                                                             className="min-w-0 flex-1 text-left"
                                                         >
-                                                            <p className={cn('truncate text-sm font-semibold underline-offset-4 hover:underline', isDark ? 'text-gray-100' : 'text-gray-900')}>
+                                                            <p className={cn('truncate text-xs sm:text-sm font-semibold underline-offset-4 hover:underline', isDark ? 'text-gray-100' : 'text-gray-900')}>
                                                                 {candidate.candidateName || 'Guest'}
                                                             </p>
-                                                            <p className={cn('mt-1 line-clamp-1 text-xs', isDark ? 'text-gray-400' : 'text-gray-500')}>
+                                                            <p className={cn('mt-1 line-clamp-1 text-[10px] sm:text-xs', isDark ? 'text-gray-400' : 'text-gray-500')}>
                                                                 {candidate.jobTitle || 'No role specified'}
                                                             </p>
                                                         </button>
@@ -773,7 +866,7 @@ function Dashboard() {
                                                                 setIsFeedbackOpen(true);
                                                             }}
                                                             className={cn(
-                                                                'rounded-full px-5 py-2 text-sm font-semibold transition-colors duration-300',
+                                                                'rounded-full px-3 sm:px-4 md:px-5 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold transition-colors duration-300 shrink-0',
                                                                 isDark
                                                                     ? 'border-white/30 text-white hover:bg-white/10'
                                                                     : 'border-[#1E90FF] text-[#1E90FF] hover:bg-[#E6F3FF]',
@@ -786,7 +879,7 @@ function Dashboard() {
                                                 : (
                                                     <div
                                                         className={cn(
-                                                            'rounded-2xl border border-dashed p-10 text-center text-sm transition-colors duration-300',
+                                                            'rounded-xl sm:rounded-2xl border border-dashed p-6 sm:p-8 md:p-10 text-center text-xs sm:text-sm transition-colors duration-300',
                                                             isDark
                                                                 ? 'border-white/20 bg-[#121212] text-gray-400'
                                                                 : 'border-[#D7E7FF] bg-[#F3F8FF] text-gray-500',
@@ -801,25 +894,25 @@ function Dashboard() {
 
                             <section
                                 className={cn(
-                                    'rounded-3xl p-6 transition-colors duration-300',
+                                    'rounded-2xl sm:rounded-3xl p-4 sm:p-5 md:p-6 transition-colors duration-300',
                                     isDark
                                         ? 'bg-[#0F0F0F] border border-white/10 shadow-none'
                                         : 'bg-white/90 border border-white/60 shadow-xl backdrop-blur-sm',
                                 )}
                             >
-                                <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center justify-between gap-2 sm:gap-3">
                                     <div>
-                                        <h3 className={cn('text-lg font-semibold', isDark ? 'text-white' : 'text-gray-900')}>
+                                        <h3 className={cn('text-base sm:text-lg font-semibold', isDark ? 'text-white' : 'text-gray-900')}>
                                             Your Interview
                                         </h3>
-                                        <p className={cn('text-xs', isDark ? 'text-gray-400' : 'text-gray-500')}>
+                                        <p className={cn('text-[10px] sm:text-xs', isDark ? 'text-gray-400' : 'text-gray-500')}>
                                             Track ongoing and recent interview sessions
                                         </p>
                                     </div>
                                     <div className="h-0 w-0" aria-hidden />
                                 </div>
 
-                                <div className="mt-6 flex min-h-[700px] max-h-[760px] flex-col gap-4 overflow-y-auto pr-1 pb-2 snap-y snap-mandatory">
+                                <div className="mt-4 sm:mt-6 flex min-h-[400px] sm:min-h-[500px] md:min-h-[600px] lg:min-h-[700px] max-h-[600px] sm:max-h-[680px] md:max-h-[720px] lg:max-h-[760px] flex-col gap-3 sm:gap-4 overflow-y-auto pr-1 pb-2 snap-y snap-mandatory">
                                     {loading
                                         ? Array.from({ length: 4 }).map((_, index) => (
                                             <div
@@ -853,18 +946,18 @@ function Dashboard() {
                                                 <div
                                                     key={groupKey}
                                                     className={cn(
-                                                        'group flex flex-col gap-4 rounded-2xl border p-5 transition hover:shadow-md snap-start',
+                                                        'group flex flex-col gap-3 sm:gap-4 rounded-xl sm:rounded-2xl border p-3 sm:p-4 md:p-5 transition hover:shadow-md snap-start',
                                                         isDark
                                                             ? 'border-white/10 bg-[#1A1A1A] hover:border-white/20 hover:shadow-black/30'
                                                             : 'border-[#D7E7FF] bg-white hover:border-[#BEE3FF]',
                                                     )}
                                                 >
-                                                    <div className="flex items-start justify-between gap-3">
+                                                    <div className="flex items-start justify-between gap-2 sm:gap-3">
                                                         <div className="min-w-0 flex-1">
-                                                            <div className="mb-1 flex items-center gap-2 flex-wrap">
+                                                            <div className="mb-1 flex items-center gap-1.5 sm:gap-2 flex-wrap">
                                                                 <div
                                                                     className={cn(
-                                                                        'size-2 rounded-full',
+                                                                        'size-1.5 sm:size-2 rounded-full shrink-0',
                                                                         interview.status === 'completed'
                                                                             ? 'bg-emerald-500'
                                                                             : interview.status === 'in_progress'
@@ -872,12 +965,12 @@ function Dashboard() {
                                                                                 : 'bg-rose-500',
                                                                     )}
                                                                 />
-                                                                <span className={cn('text-xs font-medium uppercase tracking-wide', isDark ? 'text-gray-400' : 'text-gray-500')}>
+                                                                <span className={cn('text-[10px] sm:text-xs font-medium uppercase tracking-wide', isDark ? 'text-gray-400' : 'text-gray-500')}>
                                                                     {interview.status?.replace('_', ' ') || 'Unknown'}
                                                                 </span>
                                                                 {groupCount > 1 && (
                                                                     <span className={cn(
-                                                                        'text-xs px-2 py-0.5 rounded-full font-medium',
+                                                                        'text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-medium',
                                                                         isDark 
                                                                             ? 'bg-blue-500/20 text-blue-300' 
                                                                             : 'bg-blue-100 text-blue-600'
@@ -886,18 +979,18 @@ function Dashboard() {
                                                                     </span>
                                                                 )}
                                                             </div>
-                                                            <h4 className={cn('line-clamp-2 text-base font-semibold leading-tight', isDark ? 'text-gray-100' : 'text-gray-900')}>
+                                                            <h4 className={cn('line-clamp-2 text-sm sm:text-base font-semibold leading-tight', isDark ? 'text-gray-100' : 'text-gray-900')}>
                                                                 {interview.jobTitle ?? 'Untitled Interview'}
                                                             </h4>
                                                         </div>
                                                     </div>
 
-                                                    <p className={cn('line-clamp-2 text-sm', isDark ? 'text-gray-400' : 'text-gray-600')}>
+                                                    <p className={cn('line-clamp-2 text-xs sm:text-sm', isDark ? 'text-gray-400' : 'text-gray-600')}>
                                                         {interview.jobDescription || 'No description provided.'}
                                                     </p>
 
-                                                    <div className="mt-auto flex items-center justify-between gap-4 pt-2">
-                                                        <span className={cn('text-xs font-medium', isDark ? 'text-gray-500' : 'text-gray-400')}>
+                                                    <div className="mt-auto flex items-center justify-between gap-3 sm:gap-4 pt-2">
+                                                        <span className={cn('text-[10px] sm:text-xs font-medium truncate', isDark ? 'text-gray-500' : 'text-gray-400')}>
                                                             {formatRelativeTime(interview.completedAt ?? interview.startedAt)}
                                                         </span>
                                                         <Button
@@ -911,12 +1004,10 @@ function Dashboard() {
                                                                 if (interview && interview._id && interview.jobDescription) {
                                                                     setSelectedInterview(interview);
                                                                     setIsStudentListOpen(true);
-                                                                } else {
-                                                                    console.error('Invalid interview selected:', interview);
                                                                 }
                                                             }}
                                                             className={cn(
-                                                                'h-8 rounded-full px-4 text-xs font-semibold',
+                                                                'h-7 sm:h-8 rounded-full px-3 sm:px-4 text-[10px] sm:text-xs font-semibold shrink-0',
                                                                 isDark
                                                                     ? 'border-white/20 text-white hover:bg-white/10'
                                                                     : 'border-[#1E90FF] text-[#1E90FF] hover:bg-[#E6F3FF]',
@@ -931,7 +1022,7 @@ function Dashboard() {
                                             : (
                                                 <div
                                                     className={cn(
-                                                        'rounded-2xl border border-dashed p-10 text-center text-sm transition-colors duration-300 snap-start',
+                                                        'rounded-xl sm:rounded-2xl border border-dashed p-6 sm:p-8 md:p-10 text-center text-xs sm:text-sm transition-colors duration-300 snap-start',
                                                         isDark
                                                             ? 'border-white/20 bg-[#121212] text-gray-400'
                                                             : 'border-[#D7E7FF] bg-[#F3F8FF] text-gray-500',
@@ -949,37 +1040,38 @@ function Dashboard() {
             <Dialog open={isFeedbackOpen} onOpenChange={setIsFeedbackOpen}>
                 <DialogContent
                     className={cn(
-                        'max-w-lg sm:max-w-xl max-h-[90vh] overflow-y-auto',
+                        'w-[calc(100vw-1rem)] sm:max-w-lg md:max-w-xl max-h-[90dvh] sm:max-h-[90vh] flex flex-col p-0',
                         isDark
                             ? 'bg-[#0F0F0F] text-gray-100 border border-white/10'
                             : 'bg-white text-gray-900',
                     )}
                 >
-                    <DialogHeader className="space-y-1">
-                        <DialogTitle className={cn('text-xl font-semibold', isDark ? 'text-white' : 'text-gray-900')}>
-                            Interview Feedback
-                        </DialogTitle>
-                        <DialogDescription className={cn('text-sm', isDark ? 'text-gray-400' : 'text-gray-600')}>
-                            {selectedCandidate?.candidateName
-                                ? `Feedback for ${selectedCandidate.candidateName}`
-                                : 'Feedback details'}
-                        </DialogDescription>
+                    <div className="overflow-y-auto flex-1 min-h-0 p-4 sm:p-6 pb-6 sm:pb-6">
+                        <DialogHeader className="space-y-1 mb-4">
+                            <DialogTitle className={cn('text-lg sm:text-xl font-semibold', isDark ? 'text-white' : 'text-gray-900')}>
+                                Interview Feedback
+                            </DialogTitle>
+                            <DialogDescription className={cn('text-xs sm:text-sm', isDark ? 'text-gray-400' : 'text-gray-600')}>
+                                {selectedCandidate?.candidateName
+                                    ? `Feedback for ${selectedCandidate.candidateName}`
+                                    : 'Feedback details'}
+                            </DialogDescription>
+                            {(() => {
+                                const fb = normalizeFeedback(selectedCandidate?.feedback);
+                                if (!fb?.rating) return null;
+                                return (
+                                    <p className={cn('text-sm font-semibold', isDark ? 'text-gray-200' : 'text-gray-800')}>
+                                        Rating: <span className={isDark ? 'text-white' : 'text-gray-900'}>{fb.rating}/10</span>
+                                    </p>
+                                );
+                            })()}
+                        </DialogHeader>
                         {(() => {
                             const fb = normalizeFeedback(selectedCandidate?.feedback);
-                            if (!fb?.rating) return null;
-                            return (
-                                <p className={cn('text-sm font-semibold', isDark ? 'text-gray-200' : 'text-gray-800')}>
-                                    Rating: <span className={isDark ? 'text-white' : 'text-gray-900'}>{fb.rating}/10</span>
-                                </p>
-                            );
-                        })()}
-                    </DialogHeader>
-                    {(() => {
-                        const fb = normalizeFeedback(selectedCandidate?.feedback);
-                        const qaPairs = selectedCandidate?.qaPairs as Array<{ question: string; answer: string; questionIndex: number; timestamp: number }> | undefined;
+                            const qaPairs = selectedCandidate?.qaPairs as Array<{ question: string; answer: string; questionIndex: number; timestamp: number }> | undefined;
 
-                        return (
-                            <div className="space-y-4">
+                            return (
+                                <div className="space-y-4 pb-4">
                                 {/* Feedback Section */}
                                 {!fb && (
                                     <p className={cn('text-sm', isDark ? 'text-gray-400' : 'text-gray-600')}>No feedback available yet.</p>
@@ -1009,7 +1101,7 @@ function Dashboard() {
                                                 Questions & Answers {qaPairs && qaPairs.length > 0 ? `(${qaPairs.length})` : ''}
                                             </p>
                                             {qaPairs && qaPairs.length > 0 ? (
-                                                <div className="space-y-3 max-h-96 overflow-y-auto">
+                                                <div className="space-y-3">
                                                     {qaPairs.map((qa, idx) => (
                                                         <div
                                                             key={idx}
@@ -1069,9 +1161,10 @@ function Dashboard() {
                                         )}
                                     </>
                                 )}
-                            </div>
-                        );
-                    })()}
+                                </div>
+                            );
+                        })()}
+                    </div>
                 </DialogContent>
             </Dialog>
 
@@ -1079,22 +1172,23 @@ function Dashboard() {
             <Dialog open={isStudentListOpen} onOpenChange={setIsStudentListOpen}>
                 <DialogContent
                     className={cn(
-                        'max-w-2xl max-h-[90vh] overflow-y-auto',
+                        'w-[calc(100vw-1rem)] sm:max-w-lg md:max-w-2xl max-h-[90dvh] sm:max-h-[90vh] flex flex-col p-0',
                         isDark
                             ? 'bg-[#0F0F0F] text-gray-100 border border-white/10'
                             : 'bg-white text-gray-900',
                     )}
                 >
-                    <DialogHeader className="space-y-1">
-                        <DialogTitle className={cn('text-xl font-semibold', isDark ? 'text-white' : 'text-gray-900')}>
-                            Students List
-                        </DialogTitle>
-                        <DialogDescription className={cn('text-sm', isDark ? 'text-gray-400' : 'text-gray-600')}>
-                            {selectedInterview?.jobDescription || selectedInterview?.jobTitle || 'Interview'} - All students who took interviews with this Job Description
-                        </DialogDescription>
-                    </DialogHeader>
-                    
-                    <StudentListContent 
+                    <div className="overflow-y-auto flex-1 min-h-0 p-4 sm:p-6 pb-6 sm:pb-6">
+                        <DialogHeader className="space-y-1 mb-4">
+                            <DialogTitle className={cn('text-lg sm:text-xl font-semibold', isDark ? 'text-white' : 'text-gray-900')}>
+                                Students List
+                            </DialogTitle>
+                            <DialogDescription className={cn('text-xs sm:text-sm max-h-20 sm:max-h-24 overflow-y-auto', isDark ? 'text-gray-400' : 'text-gray-600')}>
+                                {selectedInterview?.jobDescription || selectedInterview?.jobTitle || 'Interview'} - All students who took interviews with this Job Description
+                            </DialogDescription>
+                        </DialogHeader>
+                        
+                        <StudentListContent 
                         interview={selectedInterview && selectedInterview._id && selectedInterview.jobDescription ? selectedInterview : null}
                         allCandidates={candidatePreviews}
                         isDark={isDark}
@@ -1103,7 +1197,8 @@ function Dashboard() {
                             setIsStudentListOpen(false);
                             setIsFeedbackOpen(true);
                         }}
-                    />
+                        />
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>
@@ -1190,8 +1285,8 @@ function StudentListContent({
     }
 
     return (
-        <div className="space-y-3 mt-4">
-            <div className={cn('text-sm mb-2', isDark ? 'text-gray-300' : 'text-gray-700')}>
+        <div className="space-y-2 sm:space-y-3 mt-3 sm:mt-4">
+            <div className={cn('text-xs sm:text-sm mb-2', isDark ? 'text-gray-300' : 'text-gray-700')}>
                 <span className="font-semibold">{studentsList.length}</span> student{studentsList.length !== 1 ? 's' : ''} found
             </div>
             {studentsList.map((student) => (
@@ -1200,18 +1295,18 @@ function StudentListContent({
                     type="button"
                     onClick={() => onStudentClick(student as InterviewData)}
                     className={cn(
-                        'w-full text-left rounded-lg border p-4 transition hover:shadow-md',
+                        'w-full text-left rounded-lg border p-3 sm:p-4 transition hover:shadow-md',
                         isDark
                             ? 'border-white/10 bg-[#1A1A1A] hover:border-white/20 hover:bg-[#222222]'
                             : 'border-gray-200 bg-gray-50 hover:border-[#1E90FF] hover:bg-blue-50/50',
                     )}
                 >
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start justify-between gap-3 sm:gap-4">
                         <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-2">
+                            <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
                                 <div
                                     className={cn(
-                                        'size-2 rounded-full',
+                                        'size-1.5 sm:size-2 rounded-full shrink-0',
                                         student.status === 'completed'
                                             ? 'bg-emerald-500'
                                             : student.status === 'in_progress'
@@ -1219,24 +1314,24 @@ function StudentListContent({
                                                 : 'bg-rose-500',
                                     )}
                                 />
-                                <span className={cn('text-xs font-medium uppercase tracking-wide', isDark ? 'text-gray-400' : 'text-gray-500')}>
+                                <span className={cn('text-[10px] sm:text-xs font-medium uppercase tracking-wide', isDark ? 'text-gray-400' : 'text-gray-500')}>
                                     {student.status?.replace('_', ' ') || 'Unknown'}
                                 </span>
                             </div>
-                            <p className={cn('text-sm font-semibold mb-1', isDark ? 'text-gray-100' : 'text-gray-900')}>
+                            <p className={cn('text-xs sm:text-sm font-semibold mb-1', isDark ? 'text-gray-100' : 'text-gray-900')}>
                                 {student.candidateName || 'Guest Student'}
                             </p>
-                            <p className={cn('text-xs', isDark ? 'text-gray-400' : 'text-gray-500')}>
+                            <p className={cn('text-[10px] sm:text-xs', isDark ? 'text-gray-400' : 'text-gray-500')}>
                                 {formatRelativeTime(student.completedAt ?? student.startedAt)}
                             </p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                             {student.qaPairs && Array.isArray(student.qaPairs) && student.qaPairs.length > 0 && (
-                                <span className={cn('text-xs px-2 py-1 rounded-full', isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-100 text-blue-600')}>
+                                <span className={cn('text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full', isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-100 text-blue-600')}>
                                     {student.qaPairs.length} Q&A
                                 </span>
                             )}
-                            <ChevronRight className={cn('size-4', isDark ? 'text-gray-400' : 'text-gray-500')} />
+                            <ChevronRight className={cn('size-3 sm:size-4', isDark ? 'text-gray-400' : 'text-gray-500')} />
                         </div>
                     </div>
                 </button>
