@@ -497,13 +497,13 @@ function CreateInterviewDialog({
                                                     </div>
                                                     <div
                                                         className={cn(
-                                                            'flex size-6 items-center justify-center rounded-full border transition-colors',
+                                                            'flex size-6 items-center justify-center rounded-full border-2 transition-colors shrink-0',
                                                             isSelected
                                                                 ? 'border-white bg-white text-[#1E90FF]'
                                                                 : 'border-gray-300 text-transparent dark:border-white/20 dark:text-transparent',
                                                         )}
                                                     >
-                                                        <Check className="size-4" />
+                                                        <Check className="size-4" strokeWidth={2.5} />
                                                     </div>
                                                 </button>
                                             );
